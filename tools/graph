@@ -1,0 +1,45 @@
+digraph image_flow {
+	node [color="#DDFFAA" shape=diamond style=filled]
+	net1 [label=net]
+	net2 [label=net]
+	node [color="#000000" shape=box style=""]
+	img_var [label="Img_var
+(1,256,256)"]
+	img_noise_var [label="Img_noise_var
+(1,256,256)"]
+	img_clean_var [label="img_clean_var
+(1,256,256)"]
+	subgraph cluster {
+		node [color=white style=filled]
+		color=lightgrey style=filled
+		Net_input -> Net_input_saved
+		Net_input -> noise
+		Net_input_saved -> Net_input_new
+		Net_input_new -> net1
+		Net_input_saved -> net2
+		net1 -> out1
+		net2 -> out2
+		label=ineration
+		Net_input [label="Net_input
+(1,1,256,256)
+# zeros"]
+		Net_input_saved [label="Net_input_saved
+(1,1,256,256)
+# clone"]
+		noise [label="noise
+(1,1,256,256)
+# clone"]
+		Net_input_new [label="Net_input
+(1,1,256,256)
+# 94 input+noise"]
+		out1 [label="out1
+(1,1,256,256)
+# out1"]
+		out2 [label="out2
+(1,1,256,256)
+# out2"]
+	}
+	img_var -> img_noise_var
+	img_var -> img_clean_var
+	img_clean_var -> Net_input
+}

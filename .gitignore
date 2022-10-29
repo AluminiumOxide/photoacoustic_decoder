@@ -1,0 +1,17 @@
+### Python template
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# PEP 582; used by e.g. github.com/David-OConnor/pyflow
+__pypackages__/
+
+
+# costume setting
+.idea/  
+
+save/
+absorrand.json
+absorrand.mc2
+latest_img.png
