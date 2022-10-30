@@ -24,7 +24,7 @@ class TrainArguments:
 
         self.parser.add_argument('--reg_noise_std', type=float, default=0.001, help='')
         self.parser.add_argument('--reg_noise_decay', type=int, default=500, help='')
-        self.parser.add_argument('--num_iter_ua', type=int, default=200, help='')  # 直接出图
+        self.parser.add_argument('--num_iter_ua', type=int, default=1000, help='')  # 直接出图
         self.parser.add_argument('--num_iter_p0', type=int, default=10, help='')  #调用mcx
         self.parser.add_argument('--LR', type=float, default=0.0025, help='')
         self.parser.add_argument('--find_best', type=bool, default=True, help='')

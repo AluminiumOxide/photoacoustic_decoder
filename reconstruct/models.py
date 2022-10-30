@@ -61,7 +61,39 @@ class DeepDecoder(nn.Module):
         return x
 
 
-def deepdecoderrnw(opt):
+class ResBoneBlock(BoneBlock):  # 直接重写没问题吧!没问题吧!
+    def __init__(self,channel_in,channel_out,up_sample=True,end_block=False):
+        super(ResBoneBlock, self).__init__(channel_in,channel_out,up_sample=up_sample)
+
+        self.end = end_block
+
+    def forward(self, x):
+
+        if self.up_sample:
+            x = self.Upsample(x)
+        identity = x
+        x = self.body(x)
+        if not self.end:
+            x += identity
+
+        return x
+
+
+class DeepDecoderRes(DeepDecoder):
+    def __init__(self,input_channel, num_channels, output_channel):
+        super(DeepDecoderRes, self).__init__(input_channel,num_channels,output_channel)
+        # 直接换block
+        self.block_1 = ResBoneBlock(num_channels[0], num_channels[1])
+        self.block_2 = ResBoneBlock(num_channels[1], num_channels[2])
+        self.block_3 = ResBoneBlock(num_channels[2], num_channels[3])
+        self.block_4 = ResBoneBlock(num_channels[3], num_channels[3])
+        self.block_5 = ResBoneBlock(num_channels[3], output_channel, False, True)
+
+
+
+
+
+def decoderrnw(opt):
     model = DeepDecoder(input_channel=opt.input_channel,
                         num_channels=opt.num_channels,
                         output_channel=opt.output_depth
@@ -69,7 +101,14 @@ def deepdecoderrnw(opt):
     return model
 
 
+def decoderres(opt):
+    model = DeepDecoderRes(input_channel=opt.input_channel,
+                        num_channels=opt.num_channels,
+                        output_channel=opt.output_depth)
+    return model
+
+
 
 if __name__ == '__main__':
-    model = DeepDecoder(64,[64,64,64,64],1)
+    model = DeepDecoderRes(64,[64,64,64,64],1)
     print(model)
