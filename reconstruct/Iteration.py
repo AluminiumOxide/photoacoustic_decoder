@@ -7,8 +7,8 @@ import numpy as np
 from torch.autograd import Variable
 from torch.utils.tensorboard import SummaryWriter
 
-from reconstruct.Loss import mix_loss, TVLoss
-from reconstruct.post_process import draw_img
+from reconstruct.Loss import MixLoss
+from reconstruct.post_process import draw_img_ua,draw_img_p0
 
 from reconstruct.mcx_try_function import mcxtry
 
@@ -53,17 +53,6 @@ def load_optimizer(opt, model, net_input):
         optimizer = torch.optim.LBFGS(p, lr=opt.LR)
 
     return optimizer
-
-
-def load_loss(opt):
-    mse = torch.nn.MSELoss().type(opt.dtype)
-    tv = TVLoss().type(opt.dtype)
-    save_loss_list = {
-        'mse': [],
-        'tv': [],
-        'total': [],
-    }
-    return save_loss_list,mse,tv
 
 
 def exp_lr_scheduler(optimizer, epoch, init_lr=0.001, lr_decay_epoch=500):
@@ -159,7 +148,9 @@ def evaluate_info(opt, model, input_img, use_mcx=False):
 
     net_input_saved, noise, net_input = load_net_input(opt, input_img)
     optimizer = load_optimizer(opt, model, net_input)
-    save_loss_list, mse, tv = load_loss(opt)
+    # save_loss_list, mse, tv = load_loss(opt)
+    mix_loss = MixLoss(opt.dtype)
+    save_loss_list = {'mse': [], 'tv': [], 'total': [], }
 
     if opt.find_best:
         best_net = copy.deepcopy(model)
@@ -187,39 +178,35 @@ def evaluate_info(opt, model, input_img, use_mcx=False):
             加判断顺带着变量互换，似乎如果是求p0，后面生成的ua也没有使用的联系？
             """
             out_float = using_mcx(opt, out)
-            out, out_float = out_float, out
+            out, out_float = out_float, out   # out float ua / out p0
 
-        mse_loss = mse(out, input_img)
-        tv_loss = tv(out)
-        total_loss = mse_loss + 0.001 * tv_loss
+        total_loss, loss_info = mix_loss(out, input_img)
         total_loss.backward()
         optimizer.step()
 
         if i % opt.print_step == 0:
-            out2 = model(Variable(net_input_saved).type(opt.dtype))
-            loss2 = mse(out2, input_img)
+            print('Iteration {:>5d} l1 loss {:.5f} Mse loss {:.5f} Sl1 loss {:.5f} TV loss {:.5f}'
+                  .format(i, loss_info['l1'], loss_info['mse'], loss_info['sl1'], loss_info['tv']))
 
-            print('Iteration %05d Total loss %f Mse loss %f TV loss %f Other test %f' % (
-            i, total_loss.data, mse_loss.data, tv_loss.data, loss2.data), '\r')
-
-            save_loss_list["mse"].append(mse_loss.data.cpu().numpy())
-            save_loss_list["tv"].append(tv_loss.data.cpu().numpy())
+            save_loss_list["mse"].append(loss_info['mse'].cpu().numpy())
+            save_loss_list["tv"].append(loss_info['tv'].cpu().numpy())
             save_loss_list["total"].append(total_loss.data.cpu().numpy())
 
             if i % opt.draw_step == 0 or i <= opt.draw_step:  # 高频读写文件实在是太影响效率了
-                draw_img(input_img, net_input_saved, net_input, out)
-                label_and_output_image = np.array(Image.open('latest_img.png'))[:, :, 0:3]
-                writer.add_image('label_and_output', label_and_output_image,i, dataformats='HWC')
-
-            writer.add_image('output', out[0].cpu().detach().numpy(), i)
-            writer.add_scalars('loss',{'Total loss': total_loss.data,
-                                       'Mse loss': mse_loss.data,
-                                       'TV loss': tv_loss.data},i)
+                if use_mcx:
+                    np_figure = draw_img_p0(input_img, net_input_saved, net_input, out, out_float)
+                else:
+                    np_figure = draw_img_ua(input_img, net_input_saved, net_input, out)
+                writer.add_image('label_and_output', np_figure, i, dataformats='HWC')
+                writer.add_image('output', out[0].cpu().detach().numpy(), i)
+            writer.add_scalars('loss',{'Total loss': total_loss.data, 'L1 loss': loss_info['l1'],
+                                       'Mse loss': loss_info['mse'], 'Sl1 loss': loss_info['sl1'],
+                                       'TV loss': loss_info['tv'], }, i)
 
         if opt.find_best:
             # if training loss improves by at least one percent, we found a new best net
-            if best_mse > 1.005 * mse_loss.data:
-                best_mse = mse_loss.data
+            if best_mse > 1.005 * loss_info['mse']:
+                best_mse = loss_info['mse']
                 best_net = copy.deepcopy(model)
 
     writer.close()
