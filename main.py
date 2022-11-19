@@ -1,6 +1,6 @@
 import scipy
 
-from reconstruct.Iteration import load_net_input, evaluate_info
+from reconstruct.Iteration import evaluate_info
 from reconstruct.post_process import save_mat_info
 from reconstruct.train_arguments import TrainArguments
 from reconstruct.datas import LoadMatInfo
