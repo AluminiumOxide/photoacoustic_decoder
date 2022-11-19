@@ -1,12 +1,9 @@
-import io
 import os.path
 import torch
 import numpy as np
 import scipy
 import time
 import matplotlib
-from PIL import Image
-
 matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 
@@ -52,7 +49,7 @@ def flat_tensor(input):
     return full_image
 
 
-def draw_img_ua(pro_org_img, pro_net_input_saved, pro_net_input, pro_out, if_show_img=False):
+def draw_img(pro_org_img, pro_net_input_saved, pro_net_input, pro_out, if_show_img=False):
 
     org_img = torch.squeeze(pro_org_img.detach().cpu())
     net_input_saved = torch.squeeze(pro_net_input_saved.cpu().detach())
@@ -62,7 +59,7 @@ def draw_img_ua(pro_org_img, pro_net_input_saved, pro_net_input, pro_out, if_sho
     reshape_net_input_saved = flat_tensor(net_input_saved)
     reshape_net_input= flat_tensor(net_input)
 
-    figure = plt.figure(figsize=(32,8))
+    plt.figure(figsize=(32,8))
     plt.subplot(1, 4, 1)
 
     plt.title('input_image', fontsize=12)
@@ -88,19 +85,12 @@ def draw_img_ua(pro_org_img, pro_net_input_saved, pro_net_input, pro_out, if_sho
     cax = plt.axes([0.9, 0.15, 0.01, 0.7])
     plt.colorbar(cax=cax)
 
-    # ------ save plot ------
-    buf = io.BytesIO()
-    plt.savefig(buf, format='png')
-    # plt.savefig('latest_img.png')
+    plt.savefig('latest_img.png')
     if if_show_img:
         plt.show()
     plt.cla()
     plt.close("all")
-    # Convert image buffer to numpy
-    buf.seek(0)  # change pointer to the begin of image buffer
-    np_img = np.asarray(Image.open(buf))[:, :, 0:3]
 
-    return np_img
 
 def draw_img_p0(pro_org_img, pro_net_input_saved, pro_net_input, p0, ua, if_show_img=False):
 
@@ -112,8 +102,8 @@ def draw_img_p0(pro_org_img, pro_net_input_saved, pro_net_input, p0, ua, if_show
 
     reshape_net_input_saved = flat_tensor(net_input_saved)
     reshape_net_input= flat_tensor(net_input)
-    # draw plot
-    figure = plt.figure(figsize=(32,8))
+
+    plt.figure(figsize=(32,8))
     plt.subplot(1, 5, 1)
 
     plt.title('input_image', fontsize=12)
@@ -144,18 +134,8 @@ def draw_img_p0(pro_org_img, pro_net_input_saved, pro_net_input, p0, ua, if_show
     cax = plt.axes([0.9, 0.15, 0.01, 0.7])
     plt.colorbar(cax=cax)
 
-    # ------ save plot ------
-    buf = io.BytesIO()
-    plt.savefig(buf, format='png')
-    # plt.savefig('latest_img.png')
+    plt.savefig('latest_img.png')
     if if_show_img:
         plt.show()
     plt.cla()
     plt.close("all")
-    # Convert image buffer to numpy
-    buf.seek(0)  # change pointer to the begin of image buffer
-    np_img = np.asarray(Image.open(buf))[:, :, 0:3]
-
-    return np_img
-
-

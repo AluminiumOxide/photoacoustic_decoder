@@ -22,7 +22,7 @@ class BoneBlock(nn.Module):
         self.up_sample = up_sample
 
         if self.up_sample:
-            self.Upsample = nn.Upsample(scale_factor=2, mode='nearest')  # bilinear nearest
+            self.Upsample = nn.Upsample(scale_factor=2, mode='bilinear')  # nearest bilinear
 
         self.body = nn.Sequential(
             nn.ReLU(),

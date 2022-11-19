@@ -12,6 +12,7 @@ __pypackages__/
 .idea/  
 
 save/
+float_reconstruct/
 absorrand.json
 absorrand.mc2
 latest_img.png

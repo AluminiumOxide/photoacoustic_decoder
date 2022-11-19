@@ -19,33 +19,18 @@ class TVLoss(nn.Module):
         return self.TVLoss_weight * 2 * (h_tv / count_h + w_tv / count_w) / batch_size
 
 
-class MixLoss(nn.Module):
-    def __init__(self, dtype=torch.cuda.FloatTensor):
-        super(MixLoss, self).__init__()
-        self.mse = torch.nn.MSELoss().type(dtype)
-        self.l1 = nn.L1Loss().type(dtype)
-        self.sl1 = nn.SmoothL1Loss(reduction='mean', beta=1.0).type(dtype)
-        self.tv = TVLoss().type(dtype)
+def mix_loss(output_info, input_info, dtype=torch.cuda.FloatTensor, mask_var=None, apply_f=None):
+    mse = torch.nn.MSELoss().type(dtype)
+    tv = TVLoss().type(dtype)
+    # mse loss
+    if mask_var is not None:
+        mse_loss = mse(output_info * mask_var, input_info * mask_var)
+    elif apply_f:
+        mse_loss = mse(apply_f(output_info), input_info)
+    else:
+        mse_loss = mse(output_info, input_info)
+    # tv loss
+    tv_loss = tv(output_info)
 
-    def forward(self,output_info,label_info, mask_var=None, apply_f=None):
-        # mse loss
-        if mask_var is not None:
-            mse_loss = self.mse(output_info * mask_var, label_info * mask_var)
-        elif apply_f:
-            mse_loss = self.mse(apply_f(output_info), label_info)
-        else:
-            mse_loss = self.mse(output_info, label_info)
-        # l1 loss
-        l1_loss = self.l1(output_info, label_info)
-        # sl1_loss
-        sl1_loss = self.sl1(output_info, label_info)
-        # tv loss
-        tv_loss = self.tv(output_info)
-
-        total_loss = sl1_loss + mse_loss  # + l1_loss + tv_loss
-        return total_loss, {'l1': l1_loss.data,
-                            'mse': mse_loss.data,
-                            'sl1': sl1_loss.data,
-                            'tv': tv_loss.data, }
-
-
+    total_loss = mse_loss #  + tv_loss
+    return total_loss, mse_loss, tv_loss

@@ -151,12 +151,8 @@ def loadmch(fname, format='f', endian='ieee-le', datadict=False):
 
 
 def mcxtry(shuru_image):
-
-    from scipy.io import loadmat as load
     datadict = False
-
     yahau = np.reshape(shuru_image, [256, 256])
-
     yahau = np.expand_dims(yahau, -1).repeat(256, axis=-1)
     # yahau = shuru_image
     # yahau = np.reshape(shuru_image, [256, 256, 256])
@@ -164,7 +160,7 @@ def mcxtry(shuru_image):
     cfg = {
         'Session': {
             'ID': 'absorrand',
-            'Photons': 2.5e7
+            'Photons': 1e8
         },
         'Forward': {
             'T0': 0,
@@ -178,36 +174,40 @@ def mcxtry(shuru_image):
             'Media': [{"mua": 0,
                        "mus": 0,
                        "g": 1,
-                       "n": 1}],
+                       "n": 1}
+                      ],
 
             'Dim': [256, 256, 256],
             'OriginType': 1
         },
         'Optode': {
             'Source': {
-                "Type": "slit", "Pos": [0, 0, 128], "Dir": [1, 0, 0, 0], "Param1": [0, 256, 0, 0],
+                "Type": "slit", "Pos": [0, 0, 127], "Dir": [1, 0, 0, 0], "Param1": [0, 256, 0, 0],
                 "Param2": [0, 0, 0, 0],
             },
             'Detector': []
         },
-
         'Shapes': yahau
     }
 
-    for i in range(101):
+    for i in range(1, 101):
         ua_true = i / 1000
         float('%.3f' % ua_true)
-        yaha = {"mua": ua_true, "mus": 10, "g": 0.9, "n": 1.37}
+        if i == 1:
+            yaha = {"mua": 0.0, "mus": 0, "g": 1, "n": 1}  # what a delightful bug !
+        else:
+            yaha = {"mua": ua_true, "mus": 10, "g": 0.9, "n": 1.37}
         cfg["Domain"]["Media"].append(yaha)
 
-    guangyuan1 = {"Type": "slit", "Pos": [0, 0, 128], "Dir": [1, 0, 0, 0], "Param1": [0, 256, 0, 0],
+    guangyuan1 = {"Type": "slit", "Pos": [0, 0, 127], "Dir": [1, 0, 0, 0], "Param1": [0, 256, 0, 0],
                   "Param2": [0, 0, 0, 0]}
-    guangyuan2 = {"Type": "slit", "Pos": [0, 256, 128], "Dir": [0, -1, 0, 0], "Param1": [256, 0, 0, 0],
+    guangyuan2 = {"Type": "slit", "Pos": [0, 255, 127], "Dir": [0, -1, 0, 0], "Param1": [256, 0, 0, 0],
                   "Param2": [0, 0, 0, 0]}
-    guangyuan3 = {"Type": "slit", "Pos": [256, 256, 128], "Dir": [-1, 0, 0, 0], "Param1": [0, -256, 0, 0],
+    guangyuan3 = {"Type": "slit", "Pos": [255, 255, 127], "Dir": [-1, 0, 0, 0], "Param1": [0, -256, 0, 0],
                   "Param2": [0, 0, 0, 0]}
-    guangyuan4 = {"Type": "slit", "Pos": [0, 0, 128], "Dir": [0, 1, 0, 0], "Param1": [256, 0, 0, 0],
+    guangyuan4 = {"Type": "slit", "Pos": [0, 0, 127], "Dir": [0, 1, 0, 0], "Param1": [256, 0, 0, 0],
                   "Param2": [0, 0, 0, 0]}
+
     cfg["Optode"]["Source"] = guangyuan1
     newdata = cfg.copy()
     aaa = jd.encode(newdata, {'compression': 'zlib', 'base64': True})
@@ -215,7 +215,7 @@ def mcxtry(shuru_image):
     jd.save(aaa, SID + '.json', indent=4)  # 同名目录下产生 absorrand.json
 
     # sys.path.append("F:\\wc\\原来G盘\\蒙卡\\蒙卡python\\mcx")
-    sys.path.append("D:\Aluminium\Documents\MATLAB\mcx")
+    # sys.path.append("D:\Aluminium\Documents\MATLAB\mcx")
 
     mcxbin = 'default'
     if mcxbin == 'default':
@@ -223,8 +223,6 @@ def mcxtry(shuru_image):
             mcxbin = './mcx'
         else:
             # mcxbin = 'F:\\wc\\原来G盘\\蒙卡\\蒙卡python\\mcx\\pymcx\\pymcx\\mcx.exe'
-            # mcxbin = 'D:\ProgramData\MATLAB\sitePackages\mcxWin64\pymcx\pymcx\mcx.exe'
-            # mcxbin = 'D:\ProgramData\MATLAB\sitePackages\mcxWin64\bin\mcx.exe'
             mcxbin = 'mcx'
 
     flag = "0"

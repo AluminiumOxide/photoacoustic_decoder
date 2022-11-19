@@ -7,8 +7,8 @@ import numpy as np
 from torch.autograd import Variable
 from torch.utils.tensorboard import SummaryWriter
 
-from reconstruct.Loss import MixLoss
-from reconstruct.post_process import draw_img_ua,draw_img_p0
+from reconstruct.Loss import mix_loss, TVLoss
+from reconstruct.post_process import draw_img,draw_img_p0
 
 from reconstruct.mcx_try_function import mcxtry
 
@@ -24,6 +24,7 @@ def load_net_input(opt, input_image):
         shape = [1, opt.num_channels[0], width, height]  # shape=[1,64,16,16]
         print("shape: ", shape)
         net_input = Variable(torch.zeros(shape))  # net_input随机的储存大小确定并且全部给0
+        torch.manual_seed(429)
         net_input.data.uniform_()
         net_input.data *= 1. / 10
         print("B0: ", net_input)
@@ -53,6 +54,17 @@ def load_optimizer(opt, model, net_input):
         optimizer = torch.optim.LBFGS(p, lr=opt.LR)
 
     return optimizer
+
+
+def load_loss(opt):
+    mse = torch.nn.MSELoss().type(opt.dtype)
+    tv = TVLoss().type(opt.dtype)
+    save_loss_list = {
+        'mse': [],
+        'tv': [],
+        'total': [],
+    }
+    return save_loss_list,mse,tv
 
 
 def exp_lr_scheduler(optimizer, epoch, init_lr=0.001, lr_decay_epoch=500):
@@ -103,7 +115,8 @@ def using_mcx(opt, out):
         for j in range(256):
             if ua_true[iii][j] > 100:
                 ua_true[iii][j] = 100  # 然后我的MC设置的最大的吸收系数是0.1，然后我以0.001作为一个值去跑MC
-
+            if ua_true[iii][j] == 0:
+                ua_true[iii][j] = 1
     # out11 = out.data.cpu().numpy()
     ua_mc = ua_true
 
@@ -124,14 +137,16 @@ def using_mcx(opt, out):
     fai_nd7 = fai_nd6.float()  # 将fai数据类型转为float，与网络输出out想对应
     #             print(fai_nd7.dtype)
 
+    out = out + 1e-8
+
     p0_dl1 = fai_nd7.type(opt.dtype) * out  # 相乘得到p0
     p0_dl2 = torch.log(p0_dl1)
+    # p0_dl2 = p0_dl2 - torch.min(p0_dl2)
+    for iiii in range(256):
+        for jjjj in range(256):
+            if p0_dl2[0][0][iiii][jjjj] < 0:
+                p0_dl2[0][0][iiii][jjjj] = 0
     p0_dl3 = p0_dl2 / torch.max(p0_dl2)  # 取log然后归一化与输入的归一化P0相对应
-
-    for iii1 in range(256):
-        for j1 in range(256):
-            if p0_dl3[0][0][iii1][j1] < 0:
-                p0_dl3[0][0][iii1][j1] = 0
 
     p0_dl3 = p0_dl3.type(opt.dtype)
 
@@ -148,9 +163,7 @@ def evaluate_info(opt, model, input_img, use_mcx=False):
 
     net_input_saved, noise, net_input = load_net_input(opt, input_img)
     optimizer = load_optimizer(opt, model, net_input)
-    # save_loss_list, mse, tv = load_loss(opt)
-    mix_loss = MixLoss(opt.dtype)
-    save_loss_list = {'mse': [], 'tv': [], 'total': [], }
+    save_loss_list, mse, tv = load_loss(opt)
 
     if opt.find_best:
         best_net = copy.deepcopy(model)
@@ -180,33 +193,40 @@ def evaluate_info(opt, model, input_img, use_mcx=False):
             out_float = using_mcx(opt, out)
             out, out_float = out_float, out   # out float ua / out p0
 
-        total_loss, loss_info = mix_loss(out, input_img)
+        mse_loss = mse(out, input_img)
+        tv_loss = tv(out)
+        total_loss = mse_loss + 0 * tv_loss  # --------------------
         total_loss.backward()
         optimizer.step()
 
         if i % opt.print_step == 0:
-            print('Iteration {:>5d} l1 loss {:.5f} Mse loss {:.5f} Sl1 loss {:.5f} TV loss {:.5f}'
-                  .format(i, loss_info['l1'], loss_info['mse'], loss_info['sl1'], loss_info['tv']))
+            out2 = model(Variable(net_input_saved).type(opt.dtype))
+            loss2 = mse(out2, input_img)
 
-            save_loss_list["mse"].append(loss_info['mse'].cpu().numpy())
-            save_loss_list["tv"].append(loss_info['tv'].cpu().numpy())
+            print('Iteration %05d Total loss %f Mse loss %f TV loss %f Other test %f' % (
+            i, total_loss.data, mse_loss.data, tv_loss.data, loss2.data), '\r')
+
+            save_loss_list["mse"].append(mse_loss.data.cpu().numpy())
+            save_loss_list["tv"].append(tv_loss.data.cpu().numpy())
             save_loss_list["total"].append(total_loss.data.cpu().numpy())
 
             if i % opt.draw_step == 0 or i <= opt.draw_step:  # 高频读写文件实在是太影响效率了
                 if use_mcx:
-                    np_figure = draw_img_p0(input_img, net_input_saved, net_input, out, out_float)
+                    draw_img_p0(input_img, net_input_saved, net_input, out, out_float)
                 else:
-                    np_figure = draw_img_ua(input_img, net_input_saved, net_input, out)
-                writer.add_image('label_and_output', np_figure, i, dataformats='HWC')
-                writer.add_image('output', out[0].cpu().detach().numpy(), i)
-            writer.add_scalars('loss',{'Total loss': total_loss.data, 'L1 loss': loss_info['l1'],
-                                       'Mse loss': loss_info['mse'], 'Sl1 loss': loss_info['sl1'],
-                                       'TV loss': loss_info['tv'], }, i)
+                    draw_img(input_img, net_input_saved, net_input, out)
+                label_and_output_image = np.array(Image.open('latest_img.png'))[:, :, 0:3]
+                writer.add_image('label_and_output', label_and_output_image,i, dataformats='HWC')
+
+            writer.add_image('output', out[0].cpu().detach().numpy(), i)
+            writer.add_scalars('loss',{'Total loss': total_loss.data,
+                                       'Mse loss': mse_loss.data,
+                                       'TV loss': tv_loss.data},i)
 
         if opt.find_best:
             # if training loss improves by at least one percent, we found a new best net
-            if best_mse > 1.005 * loss_info['mse']:
-                best_mse = loss_info['mse']
+            if best_mse > 1.005 * mse_loss.data:
+                best_mse = mse_loss.data
                 best_net = copy.deepcopy(model)
 
     writer.close()
