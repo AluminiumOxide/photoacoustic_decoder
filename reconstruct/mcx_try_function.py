@@ -150,12 +150,16 @@ def loadmch(fname, format='f', endian='ieee-le', datadict=False):
     return data, header, photon_seed
 
 
-def mcxtry(shuru_image):
+def mcxtry(input_image,mcx_shape=[1,256,256]):
     datadict = False
-    yahau = np.reshape(shuru_image, [256, 256])
-    yahau = np.expand_dims(yahau, -1).repeat(256, axis=-1)
-    # yahau = shuru_image
-    # yahau = np.reshape(shuru_image, [256, 256, 256])
+    if mcx_shape[0] == 1: # 如果这么设置,那就是二维的了
+        mcx_2d = True
+        yahau = np.expand_dims(input_image, 0)
+        yahau = yahau.astype('uint8')
+    else: # 否则就是三维的了
+        yahau = np.reshape(input_image, [256, 256])
+        yahau = np.expand_dims(yahau, -1).repeat(256, axis=-1)
+
     cfg = OrderedDict()
     cfg = {
         'Session': {
@@ -177,137 +181,70 @@ def mcxtry(shuru_image):
                        "n": 1}
                       ],
 
-            'Dim': [256, 256, 256],
+            'Dim': mcx_shape,  # 这得改啊!不然mc2出问题
             'OriginType': 1
         },
         'Optode': {
-            'Source': {
-                "Type": "slit", "Pos": [0, 0, 127], "Dir": [1, 0, 0, 0], "Param1": [0, 256, 0, 0],
-                "Param2": [0, 0, 0, 0],
-            },
+            'Source': {},  # 光源后面根据情况来
             'Detector': []
         },
         'Shapes': yahau
     }
 
-    for i in range(1, 101):
-        ua_true = i / 1000
-        float('%.3f' % ua_true)
+    for i in range(1, 101):  # 调整编号
         if i == 1:
-            yaha = {"mua": 0.0, "mus": 0, "g": 1, "n": 1}  # what a delightful bug !
+            cfg_domain_media = {"mua": 0.0, "mus": 0, "g": 1, "n": 1}  # what a delightful bug !
         else:
-            yaha = {"mua": ua_true, "mus": 10, "g": 0.9, "n": 1.37}
-        cfg["Domain"]["Media"].append(yaha)
+            cfg_domain_media = {"mua": i / 1000, "mus": 10, "g": 0.9, "n": 1.37}
+        cfg["Domain"]["Media"].append(cfg_domain_media)
+    if mcx_shape[0] == 1:
+        guangyuan1 = {"Type": "slit", "Pos": [0, 0, 0], "Dir": [0, 1, 0, 0], "Param1": [0, 0, 256, 0],
+                      "Param2": [0, 0, 0, 0]}
+        guangyuan2 = {"Type": "slit", "Pos": [0, 0, 256], "Dir": [0, 0, -1, 0], "Param1": [0, 256, 0, 0],
+                      "Param2": [0, 0, 0, 0]}
+        guangyuan3 = {"Type": "slit", "Pos": [0, 256, 256], "Dir": [0, -1, 0, 0], "Param1": [0, 0, -256, 0],
+                      "Param2": [0, 0, 0, 0]}
+        guangyuan4 = {"Type": "slit", "Pos": [0, 0, 0], "Dir": [0, 0, 1, 0], "Param1": [0, 256, 0, 0],
+                      "Param2": [0, 0, 0, 0]}
+    else:
+        guangyuan1 = {"Type": "slit", "Pos": [0, 0, int(256/2)], "Dir": [1, 0, 0, 0], "Param1": [0, 256, 0, 0],
+                      "Param2": [0, 0, 0, 0]}
+        guangyuan2 = {"Type": "slit", "Pos": [0, 256, int(256/2)], "Dir": [0, -1, 0, 0], "Param1": [256, 0, 0, 0],
+                      "Param2": [0, 0, 0, 0]}
+        guangyuan3 = {"Type": "slit", "Pos": [256, 256, int(256/2)], "Dir": [-1, 0, 0, 0], "Param1": [0, -256, 0, 0],
+                      "Param2": [0, 0, 0, 0]}
+        guangyuan4 = {"Type": "slit", "Pos": [0, 0, int(256/2)], "Dir": [0, 1, 0, 0], "Param1": [256, 0, 0, 0],
+                      "Param2": [0, 0, 0, 0]}
 
-    guangyuan1 = {"Type": "slit", "Pos": [0, 0, 127], "Dir": [1, 0, 0, 0], "Param1": [0, 256, 0, 0],
-                  "Param2": [0, 0, 0, 0]}
-    guangyuan2 = {"Type": "slit", "Pos": [0, 255, 127], "Dir": [0, -1, 0, 0], "Param1": [256, 0, 0, 0],
-                  "Param2": [0, 0, 0, 0]}
-    guangyuan3 = {"Type": "slit", "Pos": [255, 255, 127], "Dir": [-1, 0, 0, 0], "Param1": [0, -256, 0, 0],
-                  "Param2": [0, 0, 0, 0]}
-    guangyuan4 = {"Type": "slit", "Pos": [0, 0, 127], "Dir": [0, 1, 0, 0], "Param1": [256, 0, 0, 0],
-                  "Param2": [0, 0, 0, 0]}
 
-    cfg["Optode"]["Source"] = guangyuan1
-    newdata = cfg.copy()
-    aaa = jd.encode(newdata, {'compression': 'zlib', 'base64': True})
+    # 准备完cfg，开始调用mcx
+    mcxbin = 'mcx'  # 之前的判断应该用不到？mcxlab还能在别的电脑上跑不成？
     SID = cfg["Session"]["ID"]
-    jd.save(aaa, SID + '.json', indent=4)  # 同名目录下产生 absorrand.json
+    result_list = []
+    for Source in [guangyuan1,guangyuan2,guangyuan3,guangyuan4]:  # 嗯,先这样
+        cfg["Optode"]["Source"] = Source
+        newdata = cfg.copy()
+        cfg_encoder = jd.encode(newdata, {'compression': 'zlib', 'base64': True})
+        jd.save(cfg_encoder, SID + '.json', indent=4)  # 同名目录下产生 absorrand.json
 
-    # sys.path.append("F:\\wc\\原来G盘\\蒙卡\\蒙卡python\\mcx")
-    # sys.path.append("D:\Aluminium\Documents\MATLAB\mcx")
+        os.system(mcxbin + ' -f ' + SID + '.json ' + '0')  # 同名目录下产生 absorrand.mc2
 
-    mcxbin = 'default'
-    if mcxbin == 'default':
-        if os.name == "posix":
-            mcxbin = './mcx'
-        else:
-            # mcxbin = 'F:\\wc\\原来G盘\\蒙卡\\蒙卡python\\mcx\\pymcx\\pymcx\\mcx.exe'
-            mcxbin = 'mcx'
+        if os.path.isfile(SID + '.mch'): mch = loadmch(SID + '.mch', datadict=datadict)
+        if os.path.isfile(SID + '.mc2'):
+            nbstep = round((cfg["Forward"]["T1"] - cfg["Forward"]["T0"]) / cfg["Forward"]["Dt"])
+            if "Dim" in cfg["Domain"] and cfg["Domain"]["Dim"] != []:
+                dt = cfg["Domain"]["Dim"] + [nbstep]
+            elif "Shapes" in cfg:
+                for find in cfg["Shapes"]:
+                    if "Grid" in find:
+                        dt = find["Grid"]["Size"] + [nbstep]
 
-    flag = "0"
-    os.system(mcxbin + ' -f ' + SID + '.json ' + flag)  # 同名目录下产生 absorrand.mc2
+            result_list.append(loadmc2(SID + '.mc2', dt))
 
-    mch = []
-    mc2 = []
-
-    if os.path.isfile(SID + '.mch'): mch = loadmch(SID + '.mch', datadict=datadict)
-
-    if os.path.isfile(SID + '.mc2'):
-        nbstep = round((cfg["Forward"]["T1"] - cfg["Forward"]["T0"]) / cfg["Forward"]["Dt"])
-        if "Dim" in cfg["Domain"] and cfg["Domain"]["Dim"] != []:
-            dt = cfg["Domain"]["Dim"] + [nbstep]
-        elif "Shapes" in cfg:
-            for find in cfg["Shapes"]:
-                if "Grid" in find:
-                    dt = find["Grid"]["Size"] + [nbstep]
-
-        mc2 = loadmc2(SID + '.mc2', dt)
-        result1 = mc2
-
-    cfg["Optode"]["Source"] = guangyuan2
-    newdata = cfg.copy()
-    aaa = jd.encode(newdata, {'compression': 'zlib', 'base64': True})
-    jd.save(aaa, SID + '.json', indent=4)
-    os.system(mcxbin + ' -f ' + SID + '.json ' + flag)
-
-    mc3 = []
-
-    if os.path.isfile(SID + '.mch'): mch = loadmch(SID + '.mch', datadict=datadict)
-
-    if os.path.isfile(SID + '.mc2'):
-        nbstep = round((cfg["Forward"]["T1"] - cfg["Forward"]["T0"]) / cfg["Forward"]["Dt"])
-        if "Dim" in cfg["Domain"] and cfg["Domain"]["Dim"] != []:
-            dt = cfg["Domain"]["Dim"] + [nbstep]
-        elif "Shapes" in cfg:
-            for find in cfg["Shapes"]:
-                if "Grid" in find:
-                    dt = find["Grid"]["Size"] + [nbstep]
-
-        mc3 = loadmc2(SID + '.mc2', dt)
-        result2 = mc3
-
-    cfg["Optode"]["Source"] = guangyuan3
-    newdata = cfg.copy()
-    aaa = jd.encode(newdata, {'compression': 'zlib', 'base64': True})
-    jd.save(aaa, SID + '.json', indent=4)
-    os.system(mcxbin + ' -f ' + SID + '.json ' + flag)
-
-    if os.path.isfile(SID + '.mch'): mch = loadmch(SID + '.mch', datadict=datadict)
-
-    if os.path.isfile(SID + '.mc2'):
-        nbstep = round((cfg["Forward"]["T1"] - cfg["Forward"]["T0"]) / cfg["Forward"]["Dt"])
-        if "Dim" in cfg["Domain"] and cfg["Domain"]["Dim"] != []:
-            dt = cfg["Domain"]["Dim"] + [nbstep]
-        elif "Shapes" in cfg:
-            for find in cfg["Shapes"]:
-                if "Grid" in find:
-                    dt = find["Grid"]["Size"] + [nbstep]
-
-        mc2 = loadmc2(SID + '.mc2', dt)
-        result3 = mc2
-
-    cfg["Optode"]["Source"] = guangyuan4
-    newdata = cfg.copy()
-    aaa = jd.encode(newdata, {'compression': 'zlib', 'base64': True})
-    jd.save(aaa, SID + '.json', indent=4)
-    os.system(mcxbin + ' -f ' + SID + '.json ' + flag)
-
-    if os.path.isfile(SID + '.mch'): mch = loadmch(SID + '.mch', datadict=datadict)
-
-    if os.path.isfile(SID + '.mc2'):
-        nbstep = round((cfg["Forward"]["T1"] - cfg["Forward"]["T0"]) / cfg["Forward"]["Dt"])
-        if "Dim" in cfg["Domain"] and cfg["Domain"]["Dim"] != []:
-            dt = cfg["Domain"]["Dim"] + [nbstep]
-        elif "Shapes" in cfg:
-            for find in cfg["Shapes"]:
-                if "Grid" in find:
-                    dt = find["Grid"]["Size"] + [nbstep]
-
-        mc2 = loadmc2(SID + '.mc2', dt)
-        result4 = mc2
-
-    gaga = result1 + result2 + result3 + result4
-
-    return gaga
+    results = result_list[0] + result_list[1] + result_list[2] + result_list[3]
+    if mcx_shape[0] == 1:
+        results = np.squeeze(results)  # 二维应该是直接降维吧,中间没调试,我也不知道出来的是256,256还是1,256,256
+    else:
+        results = results[:,:, int(256/2)]  # 如果是三维就取其中中间的那一片
+    return results
 

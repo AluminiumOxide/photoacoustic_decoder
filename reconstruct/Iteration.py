@@ -81,55 +81,45 @@ def exp_lr_scheduler(optimizer, epoch, init_lr=0.001, lr_decay_epoch=500):
 
 
 def using_mcx(opt, out):
-    bdzjl1 = out[0, 0, 76, 181]
-    if bdzjl1 < 0.01:
-        bdzjl1 = 0.01
+    """
+    :param opt: 字面意思
+    :param out: 生成器的输出内容
+    :param mode: 蒙特卡洛模拟空间,如果第一维数据为1,则视为2维数据
+    :return:
+    """
+    # if mcx_space[1]==1:  # 哦~为了二维数据
+    #     mcx_space = mcx_space[1],mcx_space[2],mcx_space[3]
 
-    bdzjl2 = out[0, 0, 127, 127]
-    if bdzjl2 < 0.01:
-        bdzjl2 = 0.01
+    amend_list = [out[0, 0, 76, 181],out[0, 0, 127, 127],out[0, 0, 184, 87],out[0, 0, 93, 73],out[0, 0, 146, 194]]
+    amend_list = [i.data.cpu().tolist() for i in amend_list]  # 担心一会tensor和数组一起操作出问题
+    amend_list = [0.01 if i < 0.01 else i for i in amend_list]  # 嗯
 
-    bdzjl3 = out[0, 0, 184, 87]
-    if bdzjl3 < 0.01:
-        bdzjl3 = 0.01
+    amend = sum(amend_list)/len(amend_list)
+    amend = amend / 0.01  # 这里选出来的像素值对应的ua真值是0.01
 
-    bdzjl4 = out[0, 0, 93, 73]
-    if bdzjl4 < 0.01:
-        bdzjl4 = 0.01
-
-    bdzjl5 = out[0, 0, 146, 194]
-    if bdzjl5 < 0.01:
-        bdzjl5 = 0.01
-
-    bdz = (bdzjl1 + bdzjl2 + bdzjl3 + bdzjl4 + bdzjl5) / 5
-    bdz1 = bdz / 0.01  # 这里选出来的像素值对应的ua真值是0.01
-    out = out / bdz1  # 此处out存在梯度值
-    ua_true_proto = out.data.cpu()
+    ua_with_gard = out / amend  # 此处out存在梯度值
+    ua_true_proto = ua_with_gard.data.cpu()
     ua_true = ua_true_proto.detach().numpy()  # 将ua_true与out分离，使得ua_true不带梯度值方便后续MC运行
     ua_true = np.reshape(ua_true, [256, 256])
 
     ua_true = ua_true * 1000  # 这一整段的意思就是给出来的图像进行赋值，跑MC
     ua_true = np.uint8(ua_true)
 
-    for iii in range(256):
-        for j in range(256):
-            if ua_true[iii][j] > 100:
-                ua_true[iii][j] = 100  # 然后我的MC设置的最大的吸收系数是0.1，然后我以0.001作为一个值去跑MC
-            if ua_true[iii][j] == 0:
-                ua_true[iii][j] = 1
+    ua_tune_for_mc = [[100 if i > 100 else 1 if i == 0 else i for i in line] for line in ua_true]
+    ua_tune_for_mc = np.array(ua_tune_for_mc)  # 然后我的MC设置的最大的吸收系数是0.1，然后我以0.001作为一个值去跑MC
+    # for iii in range(256):
+    #     for j in range(256):
+    #         if ua_true[iii][j] > 100:
+    #             ua_true[iii][j] = 100
+    #         if ua_true[iii][j] == 0:
+    #             ua_true[iii][j] = 1
     # out11 = out.data.cpu().numpy()
-    ua_mc = ua_true
 
-    # ua_true,ua_mc1 = uaqutipro(uanor=out,xindex=89,yindex=197)
+    fai = mcxtry(input_image=ua_tune_for_mc,)  # 开始炼丹,并得到光通量
 
-    # ua_truenp =ua_true.numpy()
+    fai_nd1 = fai  # [:, :, 127]
+    fai_nd2 = np.reshape(fai, [256, 256])  # 这步应该是多余了
 
-    # ua_mc = ua_mc1.detach().numpy()
-
-    fai = mcxtry(shuru_image=ua_mc)  # 得到光通量
-
-    fai_nd1 = fai[:, :, 127]  # 取其中中间的那一片
-    fai_nd2 = np.reshape(fai_nd1, [256, 256])
     fai_nd3 = fai_nd2 + 1e-8  # 给光通量加一个极小值防止取log时出错
     fai_nd4 = torch.from_numpy(fai_nd3)  # 准备将fai转为tensor数据
     fai_nd5 = torch.unsqueeze(fai_nd4, 0)
@@ -190,7 +180,7 @@ def evaluate_info(opt, model, input_img, use_mcx=False):
             """
             加判断顺带着变量互换，似乎如果是求p0，后面生成的ua也没有使用的联系？
             """
-            out_float = using_mcx(opt, out)
+            out_float = using_mcx(opt, out, mode=[1,256,256])
             out, out_float = out_float, out   # out float ua / out p0
 
         mse_loss = mse(out, input_img)
@@ -236,3 +226,11 @@ def evaluate_info(opt, model, input_img, use_mcx=False):
     out_img_np = model(net_input_saved.type(opt.dtype)).data.cpu().numpy()[0][0]
 
     return save_loss_list, out_img_np, model
+
+
+if __name__ == '__main__':
+    from reconstruct.train_arguments import TrainArguments
+    opt = TrainArguments().initialize()
+    out = torch.rand([1,1,256,256],requires_grad=True).type(opt.dtype)
+    out_float = using_mcx(opt, out)
+    print(out.shape)

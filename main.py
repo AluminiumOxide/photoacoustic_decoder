@@ -9,7 +9,7 @@ if __name__ == '__main__':
     loadMatInfo = LoadMatInfo(opt)  # 在这把数据加载完(不对，仅仅准备了一个图)
     # model = decoderrnw(opt).type(opt.dtype)  # 实例化模型
     model = decoderres(opt).type(opt.dtype)  # 实例化模型
-    # ua
+    # ua pre train
     ua_img_var = loadMatInfo.get_ua_img()  # 加载图像
     loss_ua_list, out_img_ua, model = evaluate_info(opt, model, ua_img_var)  # 代替 fit
     save_mat_info(opt,out_img_ua,loss_ua_list["total"], "ua", True)
@@ -18,5 +18,4 @@ if __name__ == '__main__':
     p0_img_var = loadMatInfo.get_p0_img()  # 加载图像
     loss_p0_list, out_img_p0, model = evaluate_info(opt, model, p0_img_var, use_mcx=True)  # 代替 fit
     save_mat_info(opt,out_img_p0,loss_p0_list["total"],"p0", True)
-
 
