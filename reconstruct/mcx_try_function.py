@@ -4,10 +4,9 @@ import jdata as jd
 from collections import OrderedDict
 import sys
 import os
-
+import subprocess
 
 def loadmc2(path, dimension):
-
     f = open(path, 'rb')
     data = f.read()
     data = unpack('%df' % (len(data) / 4), data)
@@ -150,21 +149,21 @@ def loadmch(fname, format='f', endian='ieee-le', datadict=False):
     return data, header, photon_seed
 
 
-def mcxtry(input_image,mcx_shape=[1,256,256]):
+def mcxtry(input_image, mcx_shape):
     datadict = False
-    if mcx_shape[0] == 1: # 如果这么设置,那就是二维的了
-        mcx_2d = True
-        yahau = np.expand_dims(input_image, 0)
-        yahau = yahau.astype('uint8')
-    else: # 否则就是三维的了
-        yahau = np.reshape(input_image, [256, 256])
-        yahau = np.expand_dims(yahau, -1).repeat(256, axis=-1)
+    if mcx_shape[0] == 1:  # 如果这么设置,那就是二维的了
+        mcx_2d = True  # 后面好像我就没用到这个货
+        input_image = np.expand_dims(input_image, 0)
+        tune_image = input_image.astype('uint8')  # uint8和int32差别大吗？是的很大！相当恐怖！兄弟！
+    else:  # 否则就是三维的了
+        input_image = np.reshape(input_image, [256, 256])  # 我感觉这一步可以删了
+        tune_image = np.expand_dims(input_image, -1).repeat(mcx_shape[2], axis=-1).astype('uint8')
 
     cfg = OrderedDict()
     cfg = {
         'Session': {
             'ID': 'absorrand',
-            'Photons': 1e8
+            'Photons': 1e4
         },
         'Forward': {
             'T0': 0,
@@ -188,7 +187,7 @@ def mcxtry(input_image,mcx_shape=[1,256,256]):
             'Source': {},  # 光源后面根据情况来
             'Detector': []
         },
-        'Shapes': yahau
+        'Shapes': tune_image  # 藏得真深啊!
     }
 
     for i in range(1, 101):  # 调整编号
@@ -197,37 +196,42 @@ def mcxtry(input_image,mcx_shape=[1,256,256]):
         else:
             cfg_domain_media = {"mua": i / 1000, "mus": 10, "g": 0.9, "n": 1.37}
         cfg["Domain"]["Media"].append(cfg_domain_media)
-    if mcx_shape[0] == 1:
-        guangyuan1 = {"Type": "slit", "Pos": [0, 0, 0], "Dir": [0, 1, 0, 0], "Param1": [0, 0, 256, 0],
-                      "Param2": [0, 0, 0, 0]}
-        guangyuan2 = {"Type": "slit", "Pos": [0, 0, 256], "Dir": [0, 0, -1, 0], "Param1": [0, 256, 0, 0],
-                      "Param2": [0, 0, 0, 0]}
-        guangyuan3 = {"Type": "slit", "Pos": [0, 256, 256], "Dir": [0, -1, 0, 0], "Param1": [0, 0, -256, 0],
-                      "Param2": [0, 0, 0, 0]}
-        guangyuan4 = {"Type": "slit", "Pos": [0, 0, 0], "Dir": [0, 0, 1, 0], "Param1": [0, 256, 0, 0],
-                      "Param2": [0, 0, 0, 0]}
-    else:
-        guangyuan1 = {"Type": "slit", "Pos": [0, 0, int(256/2)], "Dir": [1, 0, 0, 0], "Param1": [0, 256, 0, 0],
-                      "Param2": [0, 0, 0, 0]}
-        guangyuan2 = {"Type": "slit", "Pos": [0, 256, int(256/2)], "Dir": [0, -1, 0, 0], "Param1": [256, 0, 0, 0],
-                      "Param2": [0, 0, 0, 0]}
-        guangyuan3 = {"Type": "slit", "Pos": [256, 256, int(256/2)], "Dir": [-1, 0, 0, 0], "Param1": [0, -256, 0, 0],
-                      "Param2": [0, 0, 0, 0]}
-        guangyuan4 = {"Type": "slit", "Pos": [0, 0, int(256/2)], "Dir": [0, 1, 0, 0], "Param1": [256, 0, 0, 0],
-                      "Param2": [0, 0, 0, 0]}
 
+    if mcx_shape[0] == 1:  # 算了算了,最后改完再统一调
+        z, x, y = mcx_shape[0], mcx_shape[1],mcx_shape[2]  # z=1
+        source_list = [{"Type": "slit", "Pos": [0, 0, 0], "Dir": [0, 1, 0, 0], "Param1": [0, 0, y, 0],
+                        "Param2": [0, 0, 0, 0]},
+                       {"Type": "slit", "Pos": [0, 0, y], "Dir": [0, 0, -1, 0], "Param1": [0, x, 0, 0],
+                        "Param2": [0, 0, 0, 0]},
+                       {"Type": "slit", "Pos": [0, x, y], "Dir": [0, -1, 0, 0], "Param1": [0, 0, -y, 0],
+                        "Param2": [0, 0, 0, 0]},
+                       {"Type": "slit", "Pos": [0, 0, 0], "Dir": [0, 0, 1, 0], "Param1": [0, x, 0, 0],
+                        "Param2": [0, 0, 0, 0]}]
+    else:
+        x, y, z = mcx_shape[0], mcx_shape[1], mcx_shape[2]
+        source_list = [{"Type": "slit", "Pos": [0, 0, int(z / 2)], "Dir": [1, 0, 0, 0], "Param1": [0, y, 0, 0],
+                        "Param2": [0, 0, 0, 0]},
+                       {"Type": "slit", "Pos": [0, y, int(z / 2)], "Dir": [0, -1, 0, 0], "Param1": [x, 0, 0, 0],
+                        "Param2": [0, 0, 0, 0]},
+                       {"Type": "slit", "Pos": [x, y, int(z / 2)], "Dir": [-1, 0, 0, 0], "Param1": [0, -y, 0, 0],
+                        "Param2": [0, 0, 0, 0]},
+                       {"Type": "slit", "Pos": [0, 0, int(z / 2)], "Dir": [0, 1, 0, 0], "Param1": [x, 0, 0, 0],
+                        "Param2": [0, 0, 0, 0]}]
+    del x, y, z
 
     # 准备完cfg，开始调用mcx
-    mcxbin = 'mcx'  # 之前的判断应该用不到？mcxlab还能在别的电脑上跑不成？
+    mcxbin = 'mcx'  # 之前的判断应该用不到？mcxlab还能在非win上跑?可能学长得换一下路径
     SID = cfg["Session"]["ID"]
     result_list = []
-    for Source in [guangyuan1,guangyuan2,guangyuan3,guangyuan4]:  # 嗯,先这样
-        cfg["Optode"]["Source"] = Source
+    for source_info in source_list:  # 嗯,先这样
+        cfg["Optode"]["Source"] = source_info
         newdata = cfg.copy()
         cfg_encoder = jd.encode(newdata, {'compression': 'zlib', 'base64': True})
         jd.save(cfg_encoder, SID + '.json', indent=4)  # 同名目录下产生 absorrand.json
 
-        os.system(mcxbin + ' -f ' + SID + '.json ' + '0')  # 同名目录下产生 absorrand.mc2
+        console_content = mcxbin + ' -f ' + SID + '.json ' + '0'
+        # os.system(console_content)  # 同名目录下产生 absorrand.mc2
+        subprocess.check_output(console_content, shell=True)  # 是啊，为什么要用os调用呢
 
         if os.path.isfile(SID + '.mch'): mch = loadmch(SID + '.mch', datadict=datadict)
         if os.path.isfile(SID + '.mc2'):
@@ -244,7 +248,31 @@ def mcxtry(input_image,mcx_shape=[1,256,256]):
     results = result_list[0] + result_list[1] + result_list[2] + result_list[3]
     if mcx_shape[0] == 1:
         results = np.squeeze(results)  # 二维应该是直接降维吧,中间没调试,我也不知道出来的是256,256还是1,256,256
+        print('\t\tMcx_try_func: P0 output without cut size{} '.format(results.shape))
     else:
-        results = results[:,:, int(256/2)]  # 如果是三维就取其中中间的那一片
+        print('\t\tMcx_try_func: P0 output shape {} cut from half {}'.format(results.shape, int(mcx_shape[2] / 2)))
+        results = results[:, :, int(mcx_shape[2]/ 2)]  # 如果是三维就取其中中间的那一片
+        results = np.squeeze(results)
+        print('\t\tMcx_try_func: P0 output cut to {} '.format(results.shape))
     return results
 
+
+if __name__ == '__main__':
+    import numpy as np
+    import time
+    ua_tune_for_mc = np.random.randint(99, size=(256, 256))+1
+    timelist = []
+    for i in range(2,256):
+        print('step with total z is {} ---'.format(i))
+        T1 = time.time()
+        fai = mcxtry(input_image=ua_tune_for_mc, mcx_shape=[256,256,i])
+        T2 = time.time()
+        print('with time {:.4f} s'.format(T2 - T1))
+        print('')
+        timelist.append(T2 - T1)
+        # mcxtry(input_image, mcx_shape=[1, 256, 256]):
+        # print(fai.shape)
+
+    import matplotlib.pyplot as plt
+    plt.plot(timelist)
+    plt.show()

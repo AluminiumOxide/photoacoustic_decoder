@@ -22,14 +22,14 @@ def load_net_input(opt, input_image):
         width = int(input_image.data.shape[2] / totalupsample)  # 图片的长/上采样次数得到初始随机张量的尺寸
         height = int(input_image.data.shape[3] / totalupsample)
         shape = [1, opt.num_channels[0], width, height]  # shape=[1,64,16,16]
-        print("shape: ", shape)
+
         net_input = Variable(torch.zeros(shape))  # net_input随机的储存大小确定并且全部给0
         torch.manual_seed(429)
         net_input.data.uniform_()
         net_input.data *= 1. / 10
-        print("B0: ", net_input)
+        print("InputNoise B0: with shape :{}  and example info :{}".format(net_input.shape, net_input[0][0][0][:8]) )
 
-    net_input_saved = net_input.data.clone()
+    net_input_saved = net_input.data.clone()  # 总之是作为输入的噪声
     noise = net_input.data.clone()  # 保存初始张量B0
 
     return net_input_saved, noise, net_input
@@ -80,11 +80,13 @@ def exp_lr_scheduler(optimizer, epoch, init_lr=0.001, lr_decay_epoch=500):
     return optimizer
 
 
-def using_mcx(opt, out):
+def using_mcx(opt, out, mcx_shape):
     """
     :param opt: 字面意思
     :param out: 生成器的输出内容
-    :param mode: 蒙特卡洛模拟空间,如果第一维数据为1,则视为2维数据
+    :param mcx_shape: 蒙特卡洛模拟空间,如果第一维数据为1,则视为2维数据,  !似乎x,y需要和 out的长宽耦合,之后再说
+    举例: [1,256,256]为创建2维平面,对应[占位],x,y
+          [3,256,256] 为创建3维空间,对应 x,y,z  # 其中x不能是 1
     :return:
     """
     # if mcx_space[1]==1:  # 哦~为了二维数据
@@ -107,40 +109,47 @@ def using_mcx(opt, out):
 
     ua_tune_for_mc = [[100 if i > 100 else 1 if i == 0 else i for i in line] for line in ua_true]
     ua_tune_for_mc = np.array(ua_tune_for_mc)  # 然后我的MC设置的最大的吸收系数是0.1，然后我以0.001作为一个值去跑MC
-    # for iii in range(256):
-    #     for j in range(256):
-    #         if ua_true[iii][j] > 100:
-    #             ua_true[iii][j] = 100
-    #         if ua_true[iii][j] == 0:
-    #             ua_true[iii][j] = 1
-    # out11 = out.data.cpu().numpy()
 
-    fai = mcxtry(input_image=ua_tune_for_mc,)  # 开始炼丹,并得到光通量
+    fai = mcxtry(input_image=ua_tune_for_mc,mcx_shape=mcx_shape)  # 开始炼丹,并得到光通量
 
-    fai_nd1 = fai  # [:, :, 127]
-    fai_nd2 = np.reshape(fai, [256, 256])  # 这步应该是多余了
-
-    fai_nd3 = fai_nd2 + 1e-8  # 给光通量加一个极小值防止取log时出错
-    fai_nd4 = torch.from_numpy(fai_nd3)  # 准备将fai转为tensor数据
-    fai_nd5 = torch.unsqueeze(fai_nd4, 0)
-    fai_nd6 = torch.unsqueeze(fai_nd5, 0)  # 将fai格式转为1*1*256*256,与网络输出out相对应
-    fai_nd7 = fai_nd6.float()  # 将fai数据类型转为float，与网络输出out想对应
-    #             print(fai_nd7.dtype)
+    fai_tune = fai + 1e-8  # 给光通量加一个极小值防止取log时出错
+    fai_tune = torch.from_numpy(fai_tune)  # 准备将fai转为tensor数据
+    fai_tune = torch.unsqueeze(fai_tune, 0)
+    fai_tune = torch.unsqueeze(fai_tune, 0)  # 将fai格式转为1*1*256*256,与网络输出out相对应
+    fai_tune = fai_tune.float()  # 将fai数据类型转为float，与网络输出out想对应
 
     out = out + 1e-8
 
-    p0_dl1 = fai_nd7.type(opt.dtype) * out  # 相乘得到p0
-    p0_dl2 = torch.log(p0_dl1)
-    # p0_dl2 = p0_dl2 - torch.min(p0_dl2)
-    for iiii in range(256):
-        for jjjj in range(256):
-            if p0_dl2[0][0][iiii][jjjj] < 0:
-                p0_dl2[0][0][iiii][jjjj] = 0
-    p0_dl3 = p0_dl2 / torch.max(p0_dl2)  # 取log然后归一化与输入的归一化P0相对应
+    p0 = fai_tune.type(opt.dtype) * out  # 相乘得到p0,并算是接上了梯度
+    p0_tune = torch.log(p0)
 
-    p0_dl3 = p0_dl3.type(opt.dtype)
+    p0_mask = torch.zeros_like(p0_tune)  # 换了换了，能少些循环就少写循环
+    p0_tune = torch.where(p0_tune>0,p0_tune,p0_mask)
 
-    return p0_dl3
+    p0_tune = p0_tune / torch.max(p0_tune)  # 取log然后归一化与输入的归一化P0相对应
+
+    p0_tune = p0_tune.type(opt.dtype)  # 其实我感觉这句没用
+    print("\tUsing_mcx: return P0 shape {}".format(p0_tune.shape))
+    return p0_tune
+
+
+def nowtime_mcxshape(epoch, total_epoch,x_shape,y_shape):
+    """
+    :param epoch: 入当前p0的迭代次数
+    :param total_epoch: 总次数
+    :param x_shape: 输出图像的x和y多大
+    :param y_shape:
+    :return: 返回目前mcx模拟的空间类似[1,x,y]或[x,y,z]
+    """
+    final_z = max([x_shape, y_shape])
+    rate = 0.6
+    if epoch/total_epoch <= rate:
+        mcxshape = [1, x_shape, y_shape]
+    else:
+        nowtime_step = (epoch-total_epoch*rate)/(total_epoch*(1-rate))  # 0~1
+        z_shape = int(nowtime_step*nowtime_step*final_z)+2  # int(1/2)向下取整到0,但是我不喜欢用math的函数,就这样吧
+        mcxshape = [x_shape, y_shape, z_shape]
+    return mcxshape
 
 
 def evaluate_info(opt, model, input_img, use_mcx=False):
@@ -160,9 +169,11 @@ def evaluate_info(opt, model, input_img, use_mcx=False):
         best_mse = 1000000.0
 
     writer = SummaryWriter(os.path.join(opt.save_path,quantity))
-
     writer.add_image('org_input',input_img[0].cpu().detach().numpy(),1)
-    for i in range(iter):
+
+    for i in range(iter):  # --------------------------------------------------------------------------------
+        if i % opt.print_step == 0:
+            print('\nEvaluate_info: {} epoch {}'.format(quantity, i))
         # 学习率衰减
         if opt.lr_decay_epoch != 0:
             optimizer = exp_lr_scheduler(optimizer, i, init_lr=opt.LR, lr_decay_epoch=opt.lr_decay_epoch)
@@ -172,17 +183,20 @@ def evaluate_info(opt, model, input_img, use_mcx=False):
                 opt.reg_noise_std *= 0.7
             net_input = Variable(net_input_saved + (noise.normal_() * opt.reg_noise_std))
 
-        # def closure():
         optimizer.zero_grad()
         out = model(net_input.type(opt.dtype))
 
         if use_mcx:
             """
+            out作为一个1,1,256,256输入不变，mcx_shape根据p0的迭代方法从2维到3维
+            使用nowtime_mcxshape()根据当前迭代次数转换mcx的空间
             加判断顺带着变量互换，似乎如果是求p0，后面生成的ua也没有使用的联系？
             """
-            out_float = using_mcx(opt, out, mode=[1,256,256])
+            mcxshape = nowtime_mcxshape(i, opt.num_iter_p0, x_shape=out.shape[2], y_shape=out.shape[3])
+            out_float = using_mcx(opt, out, mcx_shape=mcxshape)
             out, out_float = out_float, out   # out float ua / out p0
-
+        if i % opt.print_step == 0:
+            print('Evaluate_info: calcuate mse loss {} with {}'.format(out.shape,input_img.shape))
         mse_loss = mse(out, input_img)
         tv_loss = tv(out)
         total_loss = mse_loss + 0 * tv_loss  # --------------------
@@ -231,6 +245,12 @@ def evaluate_info(opt, model, input_img, use_mcx=False):
 if __name__ == '__main__':
     from reconstruct.train_arguments import TrainArguments
     opt = TrainArguments().initialize()
-    out = torch.rand([1,1,256,256],requires_grad=True).type(opt.dtype)
-    out_float = using_mcx(opt, out)
-    print(out.shape)
+    # p0_epoch = opt.num_iter_p0
+    p0_epoch = 1000
+    # out作为一个1,1,256,256输入不变，mcx_shape根据p0的迭代方法从2维到3维
+    for i in range(p0_epoch):
+        out = torch.rand([1,1,256,256],requires_grad=True).type(opt.dtype)
+        mcxshape = nowtime_mcxshape(i, p0_epoch, x_shape=out.shape[2],y_shape=out.shape[3])
+        print(i,p0_epoch,mcxshape)
+        out_float = using_mcx(opt, out,mcx_shape=mcxshape)
+        print(out.shape,out_float.shape)

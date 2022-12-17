@@ -23,8 +23,8 @@ def save_mat_info(opt=None,image=None,loss=None,name="",show=False):
     scipy.io.savemat(loss_save_path, {loss_name: loss})
 
     if show:
-        print("save {} image to {}".format(img_name, image_save_path))
-        print("save {} loss to {}".format(loss_name, loss_save_path))
+        print("\nsave {} image to {}".format(img_name, image_save_path))
+        print("save {} loss to {}\n".format(loss_name, loss_save_path))
 
 
 def flat_tensor(input):
