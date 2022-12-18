@@ -80,17 +80,21 @@ def exp_lr_scheduler(optimizer, epoch, init_lr=0.001, lr_decay_epoch=500):
     return optimizer
 
 
-def using_mcx(opt, out, mcx_shape):
+def using_mcx(opt, out, mcx_info):
     """
     :param opt: 字面意思
     :param out: 生成器的输出内容
-    :param mcx_shape: 蒙特卡洛模拟空间,如果第一维数据为1,则视为2维数据,  !似乎x,y需要和 out的长宽耦合,之后再说
+    :param mcxinfo: 暂定为一个字典，包含 mcx_shape、mcx_photons
+    mcx_shape
+    蒙特卡洛模拟空间,如果第一维数据为1,则视为2维数据,  !似乎x,y需要和 out的长宽耦合,之后再说
     举例: [1,256,256]为创建2维平面,对应[占位],x,y
           [3,256,256] 为创建3维空间,对应 x,y,z  # 其中x不能是 1
+    mcx_photons
+    光子包数量
     :return:
     """
-    # if mcx_space[1]==1:  # 哦~为了二维数据
-    #     mcx_space = mcx_space[1],mcx_space[2],mcx_space[3]
+    mcx_shape = mcx_info['mcx_shape']
+    mcx_photons = mcx_info['mcx_photons']
 
     amend_list = [out[0, 0, 76, 181],out[0, 0, 127, 127],out[0, 0, 184, 87],out[0, 0, 93, 73],out[0, 0, 146, 194]]
     amend_list = [i.data.cpu().tolist() for i in amend_list]  # 担心一会tensor和数组一起操作出问题
@@ -110,7 +114,7 @@ def using_mcx(opt, out, mcx_shape):
     ua_tune_for_mc = [[100 if i > 100 else 1 if i == 0 else i for i in line] for line in ua_true]
     ua_tune_for_mc = np.array(ua_tune_for_mc)  # 然后我的MC设置的最大的吸收系数是0.1，然后我以0.001作为一个值去跑MC
 
-    fai = mcxtry(input_image=ua_tune_for_mc,mcx_shape=mcx_shape)  # 开始炼丹,并得到光通量
+    fai = mcxtry(input_image=ua_tune_for_mc,shape=mcx_shape,photons=mcx_photons)  # 开始炼丹,并得到光通量
 
     fai_tune = fai + 1e-8  # 给光通量加一个极小值防止取log时出错
     fai_tune = torch.from_numpy(fai_tune)  # 准备将fai转为tensor数据
@@ -129,7 +133,10 @@ def using_mcx(opt, out, mcx_shape):
     p0_tune = p0_tune / torch.max(p0_tune)  # 取log然后归一化与输入的归一化P0相对应
 
     p0_tune = p0_tune.type(opt.dtype)  # 其实我感觉这句没用
-    print("\tUsing_mcx: return P0 shape {}".format(p0_tune.shape))
+    if mcx_info['epoch'] % opt.print_step == 0:
+        print("\tUsing_mcx: input tune ua (network output) shape {}".format(out.shape))
+        print('\t\tMcx_try_func: P0 output with size{} '.format(fai.shape))
+        print("\tUsing_mcx: return P0 shape {}".format(p0_tune.shape))
     return p0_tune
 
 
@@ -142,7 +149,7 @@ def nowtime_mcxshape(epoch, total_epoch,x_shape,y_shape):
     :return: 返回目前mcx模拟的空间类似[1,x,y]或[x,y,z]
     """
     final_z = max([x_shape, y_shape])
-    rate = 0.6
+    rate = 0.2
     if epoch/total_epoch <= rate:
         mcxshape = [1, x_shape, y_shape]
     else:
@@ -150,6 +157,29 @@ def nowtime_mcxshape(epoch, total_epoch,x_shape,y_shape):
         z_shape = int(nowtime_step*nowtime_step*final_z)+2  # int(1/2)向下取整到0,但是我不喜欢用math的函数,就这样吧
         mcxshape = [x_shape, y_shape, z_shape]
     return mcxshape
+
+
+def nowtime_photons(epoch, total_epoch):
+    begin_photon = 1e4
+    end_photon = 1e6
+    rate = 0.8
+    now_rate = epoch/total_epoch
+    if epoch/total_epoch <= rate:
+        mcx_photons = begin_photon
+    else:
+        nowtime_step = (epoch - total_epoch * rate) / (total_epoch * (1.2 - rate))  # (1 - rate)
+        mcx_photons = nowtime_step*nowtime_step*(end_photon-begin_photon)+begin_photon
+    return int(mcx_photons)
+
+
+def nowtime_mcxinfo(epoch,total_epoch,x_shape,y_shape):
+    """ 具体描述看上面的函数，这里计划返回一个包含 mcx_shape、mcx_photons的字典"""
+    mcx_shape = nowtime_mcxshape(epoch, total_epoch, x_shape, y_shape)
+    mcx_photons =nowtime_photons(epoch, total_epoch)
+    mcx_info = {'mcx_shape':mcx_shape,
+                'mcx_photons':mcx_photons,
+                'epoch':epoch}
+    return mcx_info
 
 
 def evaluate_info(opt, model, input_img, use_mcx=False):
@@ -192,9 +222,13 @@ def evaluate_info(opt, model, input_img, use_mcx=False):
             使用nowtime_mcxshape()根据当前迭代次数转换mcx的空间
             加判断顺带着变量互换，似乎如果是求p0，后面生成的ua也没有使用的联系？
             """
-            mcxshape = nowtime_mcxshape(i, opt.num_iter_p0, x_shape=out.shape[2], y_shape=out.shape[3])
-            out_float = using_mcx(opt, out, mcx_shape=mcxshape)
+            mcxinfo = nowtime_mcxinfo(i, opt.num_iter_p0, x_shape=out.shape[2], y_shape=out.shape[3])
+            if i % opt.print_step == 0:
+                print('Evaluate_info: with mcx info {}'.format(mcxinfo))
+            out_float = using_mcx(opt, out, mcx_info=mcxinfo)
             out, out_float = out_float, out   # out float ua / out p0
+
+
         if i % opt.print_step == 0:
             print('Evaluate_info: calcuate mse loss {} with {}'.format(out.shape,input_img.shape))
         mse_loss = mse(out, input_img)
@@ -250,7 +284,20 @@ if __name__ == '__main__':
     # out作为一个1,1,256,256输入不变，mcx_shape根据p0的迭代方法从2维到3维
     for i in range(p0_epoch):
         out = torch.rand([1,1,256,256],requires_grad=True).type(opt.dtype)
-        mcxshape = nowtime_mcxshape(i, p0_epoch, x_shape=out.shape[2],y_shape=out.shape[3])
-        print(i,p0_epoch,mcxshape)
-        out_float = using_mcx(opt, out,mcx_shape=mcxshape)
-        print(out.shape,out_float.shape)
+        mcxinfo = nowtime_mcxinfo(i, p0_epoch, x_shape=out.shape[2],y_shape=out.shape[3])
+        print(i,p0_epoch,mcxinfo)
+        # out_float = using_mcx(opt, out,mcx_info=mcxinfo)
+        # print(out.shape,out_float.shape)
+
+    photons = []
+
+    # import math
+    # for i in range(p0_epoch):
+    #     nowtime_photon = nowtime_photons(i, p0_epoch)
+    #     # nowtime_photon = math.log(nowtime_photon)
+    #     print(nowtime_photon)
+    #     photons.append(nowtime_photon)
+    # import matplotlib.pyplot as plt
+    # plt.figure
+    # plt.plot(photons)
+    # plt.show()

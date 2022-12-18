@@ -149,21 +149,28 @@ def loadmch(fname, format='f', endian='ieee-le', datadict=False):
     return data, header, photon_seed
 
 
-def mcxtry(input_image, mcx_shape):
+def mcxtry(input_image, shape, photons):
+    """
+    :param input_image: 字面意思
+    :param shape: 蒙特卡洛模拟的空间设置
+    :param Photons: 嗯,字面意思，光子包数量
+    :return:
+    """
+
     datadict = False
-    if mcx_shape[0] == 1:  # 如果这么设置,那就是二维的了
+    if shape[0] == 1:  # 如果这么设置,那就是二维的了
         mcx_2d = True  # 后面好像我就没用到这个货
         input_image = np.expand_dims(input_image, 0)
         tune_image = input_image.astype('uint8')  # uint8和int32差别大吗？是的很大！相当恐怖！兄弟！
     else:  # 否则就是三维的了
         input_image = np.reshape(input_image, [256, 256])  # 我感觉这一步可以删了
-        tune_image = np.expand_dims(input_image, -1).repeat(mcx_shape[2], axis=-1).astype('uint8')
+        tune_image = np.expand_dims(input_image, -1).repeat(shape[2], axis=-1).astype('uint8')
 
     cfg = OrderedDict()
     cfg = {
         'Session': {
             'ID': 'absorrand',
-            'Photons': 1e4
+            'Photons': photons   # 1e8  # 真的需要这么多吗？我怎么感觉刚开始训练epoch用1e6也都差不多？还省时间
         },
         'Forward': {
             'T0': 0,
@@ -180,7 +187,7 @@ def mcxtry(input_image, mcx_shape):
                        "n": 1}
                       ],
 
-            'Dim': mcx_shape,  # 这得改啊!不然mc2出问题
+            'Dim': shape,  # 这得改啊!不然mc2出问题
             'OriginType': 1
         },
         'Optode': {
@@ -197,8 +204,8 @@ def mcxtry(input_image, mcx_shape):
             cfg_domain_media = {"mua": i / 1000, "mus": 10, "g": 0.9, "n": 1.37}
         cfg["Domain"]["Media"].append(cfg_domain_media)
 
-    if mcx_shape[0] == 1:  # 算了算了,最后改完再统一调
-        z, x, y = mcx_shape[0], mcx_shape[1],mcx_shape[2]  # z=1
+    if shape[0] == 1:  # 算了算了,最后改完再统一调
+        z, x, y = shape[0], shape[1],shape[2]  # z=1
         source_list = [{"Type": "slit", "Pos": [0, 0, 0], "Dir": [0, 1, 0, 0], "Param1": [0, 0, y, 0],
                         "Param2": [0, 0, 0, 0]},
                        {"Type": "slit", "Pos": [0, 0, y], "Dir": [0, 0, -1, 0], "Param1": [0, x, 0, 0],
@@ -208,7 +215,7 @@ def mcxtry(input_image, mcx_shape):
                        {"Type": "slit", "Pos": [0, 0, 0], "Dir": [0, 0, 1, 0], "Param1": [0, x, 0, 0],
                         "Param2": [0, 0, 0, 0]}]
     else:
-        x, y, z = mcx_shape[0], mcx_shape[1], mcx_shape[2]
+        x, y, z = shape[0], shape[1], shape[2]
         source_list = [{"Type": "slit", "Pos": [0, 0, int(z / 2)], "Dir": [1, 0, 0, 0], "Param1": [0, y, 0, 0],
                         "Param2": [0, 0, 0, 0]},
                        {"Type": "slit", "Pos": [0, y, int(z / 2)], "Dir": [0, -1, 0, 0], "Param1": [x, 0, 0, 0],
@@ -246,14 +253,14 @@ def mcxtry(input_image, mcx_shape):
             result_list.append(loadmc2(SID + '.mc2', dt))
 
     results = result_list[0] + result_list[1] + result_list[2] + result_list[3]
-    if mcx_shape[0] == 1:
+    if shape[0] == 1:
         results = np.squeeze(results)  # 二维应该是直接降维吧,中间没调试,我也不知道出来的是256,256还是1,256,256
-        print('\t\tMcx_try_func: P0 output without cut size{} '.format(results.shape))
+        # print('\t\tMcx_try_func: P0 output without cut size{} '.format(results.shape))
     else:
-        print('\t\tMcx_try_func: P0 output shape {} cut from half {}'.format(results.shape, int(mcx_shape[2] / 2)))
-        results = results[:, :, int(mcx_shape[2]/ 2)]  # 如果是三维就取其中中间的那一片
+        # print('\t\tMcx_try_func: P0 output shape {} cut from half {}'.format(results.shape, int(shape[2] / 2)))
+        results = results[:, :, int(shape[2]/ 2)]  # 如果是三维就取其中中间的那一片
         results = np.squeeze(results)
-        print('\t\tMcx_try_func: P0 output cut to {} '.format(results.shape))
+        # print('\t\tMcx_try_func: P0 output cut to {} '.format(results.shape))
     return results
 
 
@@ -265,12 +272,12 @@ if __name__ == '__main__':
     for i in range(2,256):
         print('step with total z is {} ---'.format(i))
         T1 = time.time()
-        fai = mcxtry(input_image=ua_tune_for_mc, mcx_shape=[256,256,i])
+        fai = mcxtry(input_image=ua_tune_for_mc, shape=[256,256,i],photons=1e6)
         T2 = time.time()
         print('with time {:.4f} s'.format(T2 - T1))
         print('')
         timelist.append(T2 - T1)
-        # mcxtry(input_image, mcx_shape=[1, 256, 256]):
+        # mcxtry(input_image, shape=[1, 256, 256]):
         # print(fai.shape)
 
     import matplotlib.pyplot as plt
