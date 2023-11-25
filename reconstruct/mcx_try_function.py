@@ -6,6 +6,8 @@ import sys
 import os
 import subprocess
 
+import torch
+
 def loadmc2(path, dimension):
     f = open(path, 'rb')
     data = f.read()
@@ -227,7 +229,9 @@ def mcxtry(input_image, shape, photons):
     del x, y, z
 
     # 准备完cfg，开始调用mcx
-    mcxbin = 'mcx'  # 之前的判断应该用不到？mcxlab还能在非win上跑?可能学长得换一下路径
+    # mcxbin = 'mcx'  # 之前的判断应该用不到？mcxlab还能在非win上跑?可能学长得换一下路径
+    # mcxbin = "D:\\Alu_proj\\mcx_space\\mcx2023\\bin\\mcx.exe"
+    mcxbin = "D:\\Alu_proj\\mcx_space\\mcx2020\\bin\\mcx.exe"
     SID = cfg["Session"]["ID"]
     result_list = []
     for source_info in source_list:  # 嗯,先这样
@@ -236,7 +240,7 @@ def mcxtry(input_image, shape, photons):
         cfg_encoder = jd.encode(newdata, {'compression': 'zlib', 'base64': True})
         jd.save(cfg_encoder, SID + '.json', indent=4)  # 同名目录下产生 absorrand.json
 
-        console_content = mcxbin + ' -f ' + SID + '.json ' + '0'
+        console_content = mcxbin + ' -f ' + SID + '.json' + ' -F mc2 0'
         # os.system(console_content)  # 同名目录下产生 absorrand.mc2
         subprocess.check_output(console_content, shell=True)  # 是啊，为什么要用os调用呢
 
@@ -262,6 +266,75 @@ def mcxtry(input_image, shape, photons):
         results = np.squeeze(results)
         # print('\t\tMcx_try_func: P0 output cut to {} '.format(results.shape))
     return results
+
+
+
+def using_mcx(opt, out, mcx_info, fai_tune_cache):
+    """
+    :param opt: 字面意思
+    :param out: 生成器的输出内容
+    :param mcxinfo: 暂定为一个字典，包含 epoch、mcx_shape、mcx_photons
+    mcx_shape
+    蒙特卡洛模拟空间,如果第一维数据为1,则视为2维数据,  !似乎x,y需要和 out的长宽耦合,之后再说
+    举例: [1,256,256]为创建2维平面,对应[占位],x,y
+          [3,256,256] 为创建3维空间,对应 x,y,z  # 其中x不能是 1
+    mcx_photons
+    光子包数量
+    :return:
+    """
+    epoch = mcx_info['epoch']
+    mcx_shape = mcx_info['mcx_shape']
+    mcx_photons = mcx_info['mcx_photons']
+
+    amend_list = [out[0, 0, 76, 181],out[0, 0, 127, 127],out[0, 0, 184, 87],out[0, 0, 93, 73],out[0, 0, 146, 194]]
+    amend_list = [i.data.cpu().tolist() for i in amend_list]  # 担心一会tensor和数组一起操作出问题
+    amend_list = [0.01 if i < 0.01 else i for i in amend_list]  # 嗯
+
+    amend = sum(amend_list)/len(amend_list)
+    amend = amend / 0.01  # 这里选出来的像素值对应的ua真值是0.01
+
+    ua_with_gard = out / amend  # 此处out存在梯度值
+    ua_true_proto = ua_with_gard.data.cpu()
+    ua_true = ua_true_proto.detach().numpy()  # 将ua_true与out分离，使得ua_true不带梯度值方便后续MC运行
+    ua_true = np.reshape(ua_true, [256, 256])
+
+    ua_true = ua_true * 1000  # 这一整段的意思就是给出来的图像进行赋值，跑MC
+    ua_true = np.uint8(ua_true)
+
+    ua_tune_for_mc = [[100 if i > 100 else 1 if i == 0 else i for i in line] for line in ua_true]
+    ua_tune_for_mc = np.array(ua_tune_for_mc)  # 然后我的MC设置的最大的吸收系数是0.1，然后我以0.001作为一个值去跑MC
+
+    # if epoch<5 or epoch % 5 ==0:
+    if epoch % opt.mcx_step == 0:
+        fai = mcxtry(input_image=ua_tune_for_mc,shape=mcx_shape,photons=mcx_photons)  # 开始炼丹,并得到光通量 -----------------
+
+        fai_tune = fai + 1e-8  # 给光通量加一个极小值防止取log时出错
+        fai_tune = torch.from_numpy(fai_tune)  # 准备将fai转为tensor数据
+        fai_tune = torch.unsqueeze(fai_tune, 0)
+        fai_tune = torch.unsqueeze(fai_tune, 0)  # 将fai格式转为1*1*256*256,与网络输出out相对应
+        fai_tune = fai_tune.float()              # 将fai数据类型转为float，与网络输出out想对应
+    else:
+        fai_tune = fai_tune_cache
+
+
+    out = out + 1e-8
+    fai_tune = fai_tune.type(opt.dtype)
+
+    p0 = fai_tune * out               # 相乘得到p0,并算是接上了梯度
+
+    p0_tune = torch.log(p0)
+
+    p0_mask = torch.zeros_like(p0_tune)  # 换了换了，能少些循环就少写循环
+    p0_tune = torch.where(p0_tune>0,p0_tune,p0_mask)
+
+    p0_tune = p0_tune / torch.max(p0_tune)  # 取log然后归一化与输入的归一化P0相对应
+
+    p0_tune = p0_tune.type(opt.dtype)  # 其实我感觉这句没用
+    if mcx_info['epoch'] % opt.print_step == 0:
+        print("\tUsing_mcx: input tune ua (network output) shape {}".format(out.shape))
+        print('\t\tMcx_try_func: P0 output with size{} '.format(fai_tune.shape))
+        print("\tUsing_mcx: return P0 shape {}".format(p0_tune.shape))
+    return fai_tune,p0_tune
 
 
 if __name__ == '__main__':

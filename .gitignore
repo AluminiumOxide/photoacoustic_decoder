@@ -12,7 +12,10 @@ __pypackages__/
 .idea/  
 
 save/
-float_reconstruct/
+docs/
+
 absorrand.json
 absorrand.mc2
 latest_img.png
+
+test_data/proto_ua_liver/数据处理/

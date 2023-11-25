@@ -49,83 +49,94 @@ def flat_tensor(input):
     return full_image
 
 
-def draw_img(pro_org_img, pro_net_input_saved, pro_net_input, pro_out, if_show_img=False):
+def draw_img(opt, pro_org_img, pro_net_input, ua, index=1, if_show_img=False):
 
     org_img = torch.squeeze(pro_org_img.detach().cpu())
-    net_input_saved = torch.squeeze(pro_net_input_saved.cpu().detach())
+    # net_input_saved = torch.squeeze(pro_net_input_saved.cpu().detach())
     net_input = torch.squeeze(pro_net_input.cpu().detach())
-    out = torch.squeeze(pro_out.detach().cpu())
+    out_ua = torch.squeeze(ua.detach().cpu())
 
-    reshape_net_input_saved = flat_tensor(net_input_saved)
+    # reshape_net_input_saved = flat_tensor(net_input_saved)
     reshape_net_input= flat_tensor(net_input)
 
     plt.figure(figsize=(32,8))
-    plt.subplot(1, 4, 1)
+    plt.subplot(1, 3, 1)
 
     plt.title('input_image', fontsize=12)
     plt.imshow(org_img)
     plt.tick_params(labelsize=5)
 
-    plt.subplot(1, 4, 2)
-    plt.title('net_input_saved', fontsize=12)
-    plt.imshow(reshape_net_input_saved)
-    plt.tick_params(labelsize=5)
+    # plt.subplot(1, 4, 2)
+    # plt.title('net_input_saved', fontsize=12)
+    # plt.imshow(reshape_net_input_saved)
+    # plt.tick_params(labelsize=5)
 
-    plt.subplot(1, 4, 3)
+    plt.subplot(1, 3, 2)
     plt.title('net_input(add noise)', fontsize=12)
     plt.imshow(reshape_net_input)
     plt.tick_params(labelsize=5)
 
-    plt.subplot(1, 4, 4)
+    plt.subplot(1, 3, 3)
     plt.title('output_image', fontsize=12)
-    plt.imshow(out)
+    plt.imshow(out_ua)
     plt.tick_params(labelsize=5)
 
     plt.subplots_adjust(bottom=0.15, right=0.88, top=0.85, left=0.08)
+
+
     cax = plt.axes([0.9, 0.15, 0.01, 0.7])
     plt.colorbar(cax=cax)
+    plt.text(0.5, 0.95, str(index), fontsize=12, ha="center", va="center")
 
-    plt.savefig('latest_img.png')
+
+
+    save_path = opt.save_path +'img_ua_'+str(index)+'.png'
+    plt.savefig(save_path)
+    # plt.savefig('latest_img.png')
     if if_show_img:
         plt.show()
     plt.cla()
     plt.close("all")
 
 
-def draw_img_p0(pro_org_img, pro_net_input_saved, pro_net_input, p0, ua, if_show_img=False):
+def draw_img_p0(opt, pro_org_img, pro_net_input, fai, p0, ua, index=1, if_show_img=False):
 
     org_img = torch.squeeze(pro_org_img.detach().cpu())
-    net_input_saved = torch.squeeze(pro_net_input_saved.cpu().detach())
+    # net_input_saved = torch.squeeze(pro_net_input_saved.cpu().detach())
     net_input = torch.squeeze(pro_net_input.cpu().detach())
-    out = torch.squeeze(p0.detach().cpu())
+    # out_fai = fai
+    out_fai = torch.squeeze(fai.detach().cpu())
+    out_p0 = torch.squeeze(p0.detach().cpu())
     out_ua = torch.squeeze(ua.detach().cpu())
 
-    reshape_net_input_saved = flat_tensor(net_input_saved)
-    reshape_net_input= flat_tensor(net_input)
+    reshape_net_input= flat_tensor(net_input)  # 这个是64*16*16的
 
     plt.figure(figsize=(32,8))
+
+
+
     plt.subplot(1, 5, 1)
 
-    plt.title('input_image', fontsize=12)
+    plt.title('input_label', fontsize=12)
     plt.imshow(org_img)
     plt.tick_params(labelsize=5)
 
     plt.subplot(1, 5, 2)
-    plt.title('net_input_saved', fontsize=12)
-    plt.imshow(reshape_net_input_saved)
-    plt.tick_params(labelsize=5)
-
-    plt.subplot(1, 5, 3)
     plt.title('net_input(add noise)', fontsize=12)
     plt.imshow(reshape_net_input)
     plt.tick_params(labelsize=5)
 
-    plt.subplot(1, 5, 4)
-    plt.title('output_image_p0', fontsize=12)
-    plt.imshow(out)
+    plt.subplot(1, 5, 3)
+    plt.title('output_image_fai', fontsize=12)
+    plt.imshow(out_fai)
     plt.tick_params(labelsize=5)
 
-    plt.subplot(1, 5, 5)
+    plt.subplot(1, 5, 4)
+    plt.title('output_image_p0', fontsize=12)
+    plt.imshow(out_p0)
+    plt.tick_params(labelsize=5)
+
+    plt.subplot(1, 5,5)
     plt.title('output_image_ua', fontsize=12)
     plt.imshow(out_ua)
     plt.tick_params(labelsize=5)
@@ -133,8 +144,11 @@ def draw_img_p0(pro_org_img, pro_net_input_saved, pro_net_input, p0, ua, if_show
     plt.subplots_adjust(bottom=0.15, right=0.88, top=0.85, left=0.08)
     cax = plt.axes([0.9, 0.15, 0.01, 0.7])
     plt.colorbar(cax=cax)
+    plt.text(0.5, 1, str(index), fontsize=12, ha="center", va="center")
 
-    plt.savefig('latest_img.png')
+    save_path = opt.save_path +'img_p0_'+str(index)+'.png'
+    plt.savefig(save_path)
+    # plt.savefig('latest_img.png')
     if if_show_img:
         plt.show()
     plt.cla()
