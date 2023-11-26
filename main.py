@@ -11,8 +11,8 @@ if __name__ == '__main__':
     model = decoderres(opt).type(opt.dtype)  # 实例化模型
 
     # ua pre train
-    loss_ua_list, out_img_ua, model = evaluate_info(opt, model, ua_img_var)  # 代替 fit
-    save_mat_info(opt,out_img_ua,loss_ua_list["total"], "ua", True)
+    # loss_ua_list, out_img_ua, model = evaluate_info(opt, model, ua_img_var)  # 代替 fit
+    # save_mat_info(opt,out_img_ua,loss_ua_list["total"], "ua", True)
 
     # p0
     # opt.LR = opt.LR * 0.1

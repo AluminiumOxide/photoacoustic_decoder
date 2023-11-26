@@ -1,4 +1,16 @@
-## [new] 从mcx调整到使用pmcx
+## [new]使用pmcx降低文件操作
+
+图像加载取消归一化
+
+mcx_try_function.py:拔掉几个用于扩数据的点
+
+tools添加gen_video
+
+
+
+
+
+## 从mcx调整到使用pmcx
 
 #### 生活性调整
 

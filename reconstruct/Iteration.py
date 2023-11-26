@@ -95,8 +95,8 @@ def nowtime_mcxshape(epoch, total_epoch,x_shape,y_shape):
     #     z_shape = int(nowtime_step*nowtime_step*final_z)+3  # int(1/2)向下取整到0,但是我不喜欢用math的函数,就这样吧
     #     mcxshape = [x_shape, y_shape, 21]
 
-    mcxshape = [1, x_shape, y_shape]
-    # mcxshape = [x_shape, y_shape,50]
+    # mcxshape = [1, x_shape, y_shape]
+    mcxshape = [x_shape, y_shape,50]
     return mcxshape
 
 
@@ -137,7 +137,7 @@ def evaluate_info(opt, model, label_img, use_mcx=False):
 
     if opt.find_best:
         best_net = copy.deepcopy(model)
-        best_mse = 1000000.0
+        best_mse = 1000000
 
     writer = SummaryWriter(os.path.join(opt.save_path,quantity))
     writer.add_image('org_input', label_img[0].cpu().detach().numpy(), 1)
@@ -167,7 +167,7 @@ def evaluate_info(opt, model, label_img, use_mcx=False):
             mcxinfo = nowtime_mcxinfo(i, opt.num_iter_p0, x_shape=net_output.shape[2], y_shape=net_output.shape[3])
             if i % opt.print_step == 0:
                 print('Evaluate_info: with mcx info {}'.format(mcxinfo))
-            # mc_out, mc_mix = using_mcx(opt, net_output, mcx_info=mcxinfo)  # 输出的分别是 fai 和 p0
+
             mc_out, mc_mix = using_mcx(opt, net_output, mcx_info=mcxinfo,fai_tune_cache=mc_out)  # 输出的分别是 fai 和 p0
             """ 调整后
             :param net_output: 网络输出 光子吸收系数分布 ua
@@ -187,9 +187,7 @@ def evaluate_info(opt, model, label_img, use_mcx=False):
         optimizer.step()
 
         if i % opt.print_step == 0:
-
             print('Evaluate_info: calcuate mse loss {} with {}'.format(net_output.shape, label_img.shape))
-
             print('Iteration %05d Total loss %f Mse loss %f TV loss %f ' % (
             i, total_loss.data, mse_loss.data, tv_loss.data, ), '\r')
 
