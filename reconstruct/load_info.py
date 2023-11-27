@@ -18,11 +18,11 @@ def load_arguments():
     parser.add_argument('--device', default=device, help='device id (i.e. 0 or 0,1 or cpu)')
     parser.add_argument('--dtype', default='torch.cuda.FloatTensor', help='')
     # data
-    parser.add_argument('--ua_path', default='./test_data/proto_ua_agar/ua/ua_2.mat')
-    parser.add_argument('--p0_path', default='./test_data/proto_ua_agar/p0/p0_p.mat')  # p0_final
-    # parser.add_argument('--ua_path', default='./test_data/proto_ua_liver/ua/ua.mat')
-    # parser.add_argument('--p0_path', default='./test_data/proto_ua_liver/p0/p0.mat')  # p0_final
-    parser.add_argument('--save_path', default='./save/lyp11_7/')
+    # parser.add_argument('--ua_path', default='./test_data/proto_ua_agar/ua/ua_2.mat')
+    # parser.add_argument('--p0_path', default='./test_data/proto_ua_agar/p0/p0_p.mat')  # p0_final
+    parser.add_argument('--ua_path', default='./test_data/proto_ua_liver/ua/ua.mat')
+    parser.add_argument('--p0_path', default='./test_data/proto_ua_liver/p0/p0.mat')  # p0_final
+    parser.add_argument('--save_path', default='./save/lyp11_12/')
     # model
     parser.add_argument('--input_channel', type=int, default=64)
     parser.add_argument('--num_channels', type=list, default=[64, 64, 64, 64])
@@ -30,15 +30,15 @@ def load_arguments():
     parser.add_argument('--reg_noise_std', type=float, default=0.001, help='')
     parser.add_argument('--reg_noise_decay', type=int, default=500, help='')
     parser.add_argument('--num_iter_ua', type=int, default=101, help='')  # 相当于预训练
-    parser.add_argument('--num_iter_p0', type=int, default=int(3e7+1), help='')  # 调用mcx
-    parser.add_argument('--LR', type=float, default=0.0025, help='')
+    parser.add_argument('--num_iter_p0', type=int, default=int(10000+1), help='')  # 调用mcx
+    parser.add_argument('--LR', type=float, default=0.025, help='')
     parser.add_argument('--find_best', type=bool, default=True, help='')
     parser.add_argument('--optimizer', type=str, default='adam', help='')
     # others
     parser.add_argument('--opt_input', type=bool, default=False, help='')
     parser.add_argument('--mask_var', default=None, help='')
     parser.add_argument('--apply_f', default=None, help='')
-    parser.add_argument('--lr_decay_epoch', default=0, help='')
+    parser.add_argument('--lr_decay_epoch', default=3000, help='')
     parser.add_argument('--net_input', default=None, help='')
     parser.add_argument('--weight_decay', default=0, help='')
     # collect

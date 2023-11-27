@@ -1,3 +1,5 @@
+import math
+
 import numpy as np
 from struct import unpack
 import jdata as jd
@@ -177,18 +179,17 @@ def mcxtry(input_image, shape, photons):
     :param Photons: 嗯,字面意思，光子包数量
     :return:
     """
-
-    datadict = False
-    if shape[0] == 1:  # 如果这么设置,那就是二维的了
-        mcx_2d = True  # 后面好像我就没用到这个货
-        input_image = np.expand_dims(input_image, 0)
-        tune_image = input_image # .astype('uint8')  # uint8和int32差别大吗？是的很大！相当恐怖！兄弟！
-    else:  # 否则就是三维的了
-        input_image = np.reshape(input_image, [256, 256])  # 我感觉这一步可以删了
-        tune_image = np.expand_dims(input_image, -1).repeat(shape[2], axis=-1)  # .astype('uint8')
-
-    tune_image_f32 = tune_image.astype(np.float32)
-    tune_image_f32_4dim = tune_image_f32[np.newaxis, :, :, :]
+    # datadict = False
+    # if shape[0] == 1:  # 如果这么设置,那就是二维的了
+    #     mcx_2d = True  # 后面好像我就没用到这个货
+    #     input_image = np.expand_dims(input_image, 0)
+    #     tune_image = input_image # .astype('uint8')  # uint8和int32差别大吗？是的很大！相当恐怖！兄弟！
+    # else:  # 否则就是三维的了
+    # input_image = np.reshape(input_image, [256, 256])  # 我感觉这一步可以删了
+    # tune_image = np.expand_dims(input_image, -1).repeat(shape[2], axis=-1)  # .astype('uint8')
+    #
+    # tune_image_f32 = tune_image.astype(np.float32)
+    # tune_image_f32_4dim = tune_image_f32[np.newaxis, :, :, :]
 
     # tune_us_4dim = np.ones_like(tune_image_f32_4dim)
     # tune_us_f32_4dim = tune_us_4dim.astype(np.float32)
@@ -231,27 +232,27 @@ def mcxtry(input_image, shape, photons):
     #         cfg_domain_media = {"mua": i / 1000, "mus": 10, "g": 0.9, "n": 1.37}
     #     cfg["Domain"]["Media"].append(cfg_domain_media)
 
-    if shape[0] == 1:  # 算了算了,最后改完再统一调
-        z, x, y = shape[0], shape[1],shape[2]  # z=1
-        source_list = [{"Type": "slit", "Pos": [0, 0, 0], "Dir": [0, 1, 0], "Param1": [0, 0, y, 0],
-                        "Param2": [0, 0, 0, 0]},
-                       {"Type": "slit", "Pos": [0, 0, y], "Dir": [0, 0, -1], "Param1": [0, x, 0, 0],
-                        "Param2": [0, 0, 0, 0]},
-                       {"Type": "slit", "Pos": [0, x, y], "Dir": [0, -1, 0], "Param1": [0, 0, -y, 0],
-                        "Param2": [0, 0, 0, 0]},
-                       {"Type": "slit", "Pos": [0, 0, 0], "Dir": [0, 0, 1], "Param1": [0, x, 0, 0],
-                        "Param2": [0, 0, 0, 0]}]
-
-    else:
-        x, y, z = shape[0], shape[1], shape[2]
-        source_list = [{"Type": "slit", "Pos": [0, 0, int(z / 2)], "Dir": [1, 0, 0, 0], "Param1": [0, y, 0, 0],
-                        "Param2": [0, 0, 0, 0]},
-                       {"Type": "slit", "Pos": [0, y, int(z / 2)], "Dir": [0, -1, 0, 0], "Param1": [x, 0, 0, 0],
-                        "Param2": [0, 0, 0, 0]},
-                       {"Type": "slit", "Pos": [x, y, int(z / 2)], "Dir": [-1, 0, 0, 0], "Param1": [0, -y, 0, 0],
-                        "Param2": [0, 0, 0, 0]},
-                       {"Type": "slit", "Pos": [0, 0, int(z / 2)], "Dir": [0, 1, 0, 0], "Param1": [x, 0, 0, 0],
-                        "Param2": [0, 0, 0, 0]}]
+    # if shape[0] == 1:  # 算了算了,最后改完再统一调
+    #     z, x, y = shape[0], shape[1],shape[2]  # z=1
+    #     source_list = [{"Type": "slit", "Pos": [0, 0, 0], "Dir": [0, 1, 0], "Param1": [0, 0, y, 0],
+    #                     "Param2": [0, 0, 0, 0]},
+    #                    {"Type": "slit", "Pos": [0, 0, y], "Dir": [0, 0, -1], "Param1": [0, x, 0, 0],
+    #                     "Param2": [0, 0, 0, 0]},
+    #                    {"Type": "slit", "Pos": [0, x, y], "Dir": [0, -1, 0], "Param1": [0, 0, -y, 0],
+    #                     "Param2": [0, 0, 0, 0]},
+    #                    {"Type": "slit", "Pos": [0, 0, 0], "Dir": [0, 0, 1], "Param1": [0, x, 0, 0],
+    #                     "Param2": [0, 0, 0, 0]}]
+    #
+    # else:
+    x, y, z = shape[0], shape[1], shape[2]
+    source_list = [{"Type": "slit", "Pos": [0, 0, math.ceil(z / 2)], "Dir": [1, 0, 0, 0], "Param1": [0, y, 0, 0],
+                    "Param2": [0, 0, 0, 0]},
+                   {"Type": "slit", "Pos": [0, y, math.ceil(z / 2)], "Dir": [0, -1, 0, 0], "Param1": [x, 0, 0, 0],
+                    "Param2": [0, 0, 0, 0]},
+                   {"Type": "slit", "Pos": [x, y, math.ceil(z / 2)], "Dir": [-1, 0, 0, 0], "Param1": [0, -y, 0, 0],
+                    "Param2": [0, 0, 0, 0]},
+                   {"Type": "slit", "Pos": [0, 0, math.ceil(z / 2)], "Dir": [0, 1, 0, 0], "Param1": [x, 0, 0, 0],
+                    "Param2": [0, 0, 0, 0]}]
     del x, y, z
 
     # 准备完cfg，开始调用mcx
@@ -262,6 +263,25 @@ def mcxtry(input_image, shape, photons):
     result_list = []
     with suppress_stdout_stderr():
         for source_info in source_list:  # 嗯,先这样
+            res = pmcx.run(
+                nphoton=10000000,  # photons,
+                vol=input_image,
+                tstart=0,
+                tend=5e-9,
+                tstep=5e-9,
+                gpuid='1',
+                autopilot=1,
+                isreflect=1,
+                unitinmm=0.1,
+                srctype=source_info["Type"],
+                srcpos=source_info["Pos"],
+                srcdir=source_info["Dir"],
+                srcparam1=source_info["Param1"],
+                srcparam2=source_info["Param2"],
+                prop=np.array([[0, 0, 1, 1], [0.01, 1, 0.9, 1.37]]),
+            )
+            result_list.append(res['flux'])
+
             # cfg["Optode"]["Source"] = source_info
             # newdata = cfg.copy()
             # cfg_encoder = jd.encode(newdata, {'compression': 'zlib', 'base64': True})
@@ -283,25 +303,6 @@ def mcxtry(input_image, shape, photons):
             #
             #     result_list.append(loadmc2(SID + '.mc2', dt))
 
-            res = pmcx.run(
-                nphoton=photons,
-                vol=tune_image_f32_4dim,
-                tstart=0,
-                tend=5e-9,
-                tstep=5e-9,
-                gpuid='1',
-                autopilot=1,
-                srctype=source_info["Type"],
-                srcpos=source_info["Pos"],
-                srcdir=source_info["Dir"],
-                srcparam1=source_info["Param1"],
-                srcparam2=source_info["Param2"],
-
-                prop=np.array([[0, 0, 1, 1], [0.01, 1, 0.9, 1.37]]),
-                flog=None
-            )
-            result_list.append(res['flux'])
-
     results = result_list[0] + result_list[1] + result_list[2] + result_list[3]
     if shape[0] == 1:
         results = np.squeeze(results)  # 二维应该是直接降维吧,中间没调试,我也不知道出来的是256,256还是1,256,256
@@ -315,7 +316,7 @@ def mcxtry(input_image, shape, photons):
 
 
 
-def using_mcx(opt, out, mcx_info, fai_tune_cache):
+def using_mcx(opt, ua, us , mcx_info, fai_tune_cache):
     """
     :param opt: 字面意思
     :param out: 生成器的输出内容
@@ -335,26 +336,44 @@ def using_mcx(opt, out, mcx_info, fai_tune_cache):
     # amend_list = [out[0, 0, 76, 181],out[0, 0, 127, 127],out[0, 0, 184, 87],out[0, 0, 93, 73],out[0, 0, 146, 194]]
     # amend_list = [i.data.cpu().tolist() for i in amend_list]  # 担心一会tensor和数组一起操作出问题
     # amend_list = [0.01 if i < 0.01 else i for i in amend_list]  # 嗯
-    #
     # amend = sum(amend_list)/len(amend_list)
     # amend = amend / 0.01  # 这里选出来的像素值对应的ua真值是0.01
-    #
     # ua_with_gard = out / amend  # 此处out存在梯度值
-    ua_true_proto = out.data.cpu()
-    ua_true = ua_true_proto.detach().numpy()  # 将ua_true与out分离，使得ua_true不带梯度值方便后续MC运行
+
+    ua_true = ua.data.cpu().detach()
+    ua_true = ua_true.numpy()      # 将ua_true与out分离，使得ua_true不带梯度值方便后续MC运行
     ua_true = np.reshape(ua_true, [256, 256])
 
-    # ua_true = ua_true * 1000  # 这一整段的意思就是给出来的图像进行赋值，跑MC
-    # ua_true = np.uint8(ua_true)
+    us_true = us.data.cpu().detach()
+    us_true = us_true.numpy()      # 将ua_true与out分离，使得ua_true不带梯度值方便后续MC运行
+    us_true = np.reshape(us_true, [256, 256])
 
-    # ua_tune_for_mc = [[100 if i > 100 else 1 if i == 0 else i for i in line] for line in ua_true]
-    # ua_tune_for_mc = np.array(ua_tune_for_mc)  # 然后我的MC设置的最大的吸收系数是0.1，然后我以0.001作为一个值去跑MC
-    ua_tune_for_mc = np.array(ua_true)
+    # g_true = np.full_like(us_true, 0.9)  # 暂时的权宜之计，组织全是g=0.9,n=1.37,外部全是g=1,n=1
+    # g_true = np.where(us_true == 0, 1, g_true)
+    # n_true = np.full_like(us_true, 1.37)
+    # n_true = np.where(us_true == 0, 1, n_true)
 
-    # if epoch<5 or epoch % 5 ==0:
+    ua_3dim = np.expand_dims(ua_true, -1).repeat(mcx_shape[2], axis=-1)  # 向Z轴扩
+    us_3dim = np.expand_dims(us_true, -1).repeat(mcx_shape[2], axis=-1)  # 向Z轴扩
+    # g_3dim = np.expand_dims(g_true, -1).repeat(mcx_shape[2], axis=-1)  # 向Z轴扩
+    # n_3dim = np.expand_dims(n_true, -1).repeat(mcx_shape[2], axis=-1)  # 向Z轴扩
+
+    ua_4dim = ua_3dim[np.newaxis, :, :, :]
+    us_4dim = us_3dim[np.newaxis, :, :, :]
+    # g_4dim = g_3dim[np.newaxis, :, :, :]
+    # n_4dim = n_3dim[np.newaxis, :, :, :]
+
+    matrix_100 = np.concatenate((ua_4dim, us_4dim), axis=0)
+    matrix_100 = matrix_100.astype(np.float32)
+    # matrix_103 = np.concatenate((ua_4dim, us_4dim, g_4dim, n_4dim), axis=0)
+    # matrix_103 = matrix_103.astype(np.uint8)
+
     if epoch % opt.mcx_step == 0:
-        fai = mcxtry(input_image=ua_tune_for_mc,shape=mcx_shape,photons=mcx_photons)  # 开始炼丹,并得到光通量 -----------------
-
+        fai = mcxtry(input_image=matrix_100,shape=mcx_shape,photons=mcx_photons)  # 开始炼丹,并得到光通量 -----------------
+        # sum_1 = fai.sum()
+        fai = np.where(us_true == 0, 0, fai)
+        # sum_2 = fai.sum()
+        # fai = fai * sum_2 / sum_1
         fai_tune = fai + 1e-8  # 给光通量加一个极小值防止取log时出错
         fai_tune = torch.from_numpy(fai_tune)  # 准备将fai转为tensor数据
         fai_tune = torch.unsqueeze(fai_tune, 0)
@@ -363,25 +382,27 @@ def using_mcx(opt, out, mcx_info, fai_tune_cache):
     else:
         fai_tune = fai_tune_cache
 
-
-    out = out + 1e-8
+    ua_true = ua_true + 1e-8
     fai_tune = fai_tune.type(opt.dtype)
 
-    p0 = fai_tune * out               # 相乘得到p0,并算是接上了梯度
+    p0 = fai_tune * ua               # 相乘得到p0,并算是接上了梯度
 
     p0_tune = torch.log(p0)
 
     p0_mask = torch.zeros_like(p0_tune)  # 换了换了，能少些循环就少写循环
-    p0_tune = torch.where(p0_tune>0,p0_tune,p0_mask)
+    p0_tune = torch.where(p0_tune>0.0001,p0_tune,p0_mask)
 
     p0_tune = p0_tune / torch.max(p0_tune)  # 取log然后归一化与输入的归一化P0相对应
 
     p0_tune = p0_tune.type(opt.dtype)  # 其实我感觉这句没用
     if mcx_info['epoch'] % opt.print_step == 0:
-        print("\tUsing_mcx: input tune ua (network output) shape {}".format(out.shape))
         print('\t\tMcx_try_func: P0 output with size{} '.format(fai_tune.shape))
         print("\tUsing_mcx: return P0 shape {}".format(p0_tune.shape))
     return fai_tune,p0_tune
+
+
+
+
 
 
 if __name__ == '__main__':
