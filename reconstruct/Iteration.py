@@ -23,7 +23,7 @@ def load_net_input(opt, input_image):
         height = int(input_image.data.shape[3] / totalupsample)
         shape = [1, opt.num_channels[0], width, height]  # shape=[1,64,16,16]
 
-        net_const = torch.tensor(torch.zeros(shape)).requires_grad_()  # net_const 随机的储存大小确定并且全部给0
+        net_const = torch.zeros(shape).requires_grad_(True)  # net_const 随机的储存大小确定并且全部给0
         torch.manual_seed(429)
         net_const.data.uniform_()
         net_const.data *= 1. / 10
@@ -68,7 +68,7 @@ def exp_lr_scheduler(optimizer, opt):
     """Decay learning rate by a factor of 0.1 every lr_decay_epoch epochs."""
     # decay_time = epoch//lr_decay_epoch
     # lr = lr * (0.1 ** decay_time)
-    opt.LR = opt.LR * 0.1
+    opt.LR = opt.LR * 0.6
 
     print('LR is set to {}'.format(opt.LR))
     for param_group in optimizer.param_groups:
@@ -125,6 +125,10 @@ def nowtime_mcxinfo(epoch,total_epoch,x_shape,y_shape):
 
 
 def evaluate_info(opt, model, label_img):
+    """ label_img: tensor(1,1,256,256) """
+    # opt.margin_flag = 0.1  # model的输出∈[0,1] 在该值上的全进行计算，该值以下全部置0  # 注意:该值与label边界判定的阈值并不是一个意思
+    opt.ua_min = 0.0      # 预先设定,组织体吸收系数最小值
+    opt.ua_max = 0.1       # 预先设定,组织体吸收系数最大值
     iter = opt.num_iter_p0
     quantity = 'p0'
 
@@ -136,7 +140,7 @@ def evaluate_info(opt, model, label_img):
         best_net = copy.deepcopy(model)
         best_mse = 1000000
 
-    margin_idx = torch.where(label_img < 0.001)
+    margin_idx = torch.where(label_img < 0.00001)
     matrix_us = torch.full_like(label_img, 1)
     matrix_us[margin_idx] = 0
 
@@ -155,26 +159,25 @@ def evaluate_info(opt, model, label_img):
             net_input = net_input_const + torch.randn(net_input_const.shape) * opt.reg_noise_std
 
         optimizer.zero_grad()
-        
         net_output = model(net_input.type(opt.dtype))
-        
         margin_label = net_output.clone()
         margin_label[margin_idx] = 0
         mse_loss_margin = mse(net_output, margin_label)
+        mse_loss_margin.backward()
+        optimizer.step()
 
-        # mse_loss_margin.backward()
-        # optimizer.step()
-        # optimizer.zero_grad()
-        # net_output = model(net_input.type(opt.dtype))
+        optimizer.zero_grad()
+        net_output = model(net_input.type(opt.dtype))
 
         """
-        out作为一个1,1,256,256输入不变，mcx_shape根据p0的迭代方法从2维到3维
-        使用nowtime_mcxshape()根据当前迭代次数转换mcx的空间
-        加判断顺带着变量互换，似乎如果是求p0，后面生成的ua也没有使用的联系？
+        net_output作为一个1,1,256,256输入 (ua、us) [0,1]
+        使用nowtime_mcxshape()根据当前迭代次数转换mcx的空间以及当前模拟光子数
+        opt.ua_min 和 opt.ua_max 临时加的,后续将网络输出与该区间匹配
+        using_mcx() 的输入分别是 opt, ua, us, margin, mcx_info, fai_tune_cache
         """
         mcxinfo = nowtime_mcxinfo(i, opt.num_iter_p0, x_shape=net_output.shape[2], y_shape=net_output.shape[3])
 
-        mc_out, mc_mix = using_mcx(opt, ua=net_output, us=matrix_us, mcx_info=mcxinfo,fai_tune_cache=mc_out)  # 输出的分别是 fai 和 p0
+        mc_out, mc_mix = using_mcx(opt, net_output, matrix_us,margin_idx, mcxinfo,mc_out)  # 输出的分别是 fai 和 p0
         """ 调整后
         :param net_output: 网络输出 光子吸收系数分布 ua
         :param mc_out: 蒙卡输出 光通量分布 fai
@@ -183,7 +186,8 @@ def evaluate_info(opt, model, label_img):
         # Huber_loss = nn.SmoothL1Loss(beta=1)
         mse_loss = mse(mc_mix, label_img)
         tv_loss = tv(mc_mix)
-        total_loss = mse_loss + 0.5 * mse_loss_margin
+        total_loss = mse_loss
+        # total_loss = mse_loss +  mse_loss_margin
         # --------------------------------------------------------------------------------------------------------------
 
         total_loss.backward()
@@ -201,9 +205,12 @@ def evaluate_info(opt, model, label_img):
             save_loss_list["total"].append(total_loss.data.cpu().numpy())
 
             if i % opt.draw_step == 0 or i <= opt.draw_step:  # 高频读写文件实在是太影响效率了
-                draw_img_p0(opt, label_img, net_input, mc_out ,mc_mix, net_output, i)
+                out_draw = net_output.clone()
+                out_draw[margin_idx] = 0
+                draw_img_p0(opt, label_img, net_input, mc_out ,mc_mix, out_draw, i)
 
             writer.add_image('output', net_output[0].cpu().detach().numpy(), i)
+            # writer.add_image('output', net_output[0].cpu().detach().numpy(), i)
             writer.add_scalars('loss',{'Total loss': total_loss.data,
                                        'Mse loss': mse_loss.data,
                                        'TV loss': tv_loss.data},i)

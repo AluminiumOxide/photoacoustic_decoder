@@ -22,7 +22,7 @@ def load_arguments():
     # parser.add_argument('--p0_path', default='./test_data/proto_ua_agar/p0/p0_p.mat')  # p0_final
     parser.add_argument('--ua_path', default='./test_data/proto_ua_liver/ua/ua.mat')
     parser.add_argument('--p0_path', default='./test_data/proto_ua_liver/p0/p0.mat')  # p0_final
-    parser.add_argument('--save_path', default='./save/lyp11_12/')
+    parser.add_argument('--save_path', default='./save/lyp11_16/')
     # model
     parser.add_argument('--input_channel', type=int, default=64)
     parser.add_argument('--num_channels', type=list, default=[64, 64, 64, 64])

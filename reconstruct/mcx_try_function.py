@@ -174,76 +174,11 @@ class suppress_stdout_stderr(object):
 
 def mcxtry(input_image, shape, photons):
     """
-    :param input_image: 字面意思
+    :param input_image: npdarray(2,256,256,z) 对应(ua,x,y,z)和(us,x,y,z)
     :param shape: 蒙特卡洛模拟的空间设置
-    :param Photons: 嗯,字面意思，光子包数量
+    :param Photons: 光子包数量
     :return:
     """
-    # datadict = False
-    # if shape[0] == 1:  # 如果这么设置,那就是二维的了
-    #     mcx_2d = True  # 后面好像我就没用到这个货
-    #     input_image = np.expand_dims(input_image, 0)
-    #     tune_image = input_image # .astype('uint8')  # uint8和int32差别大吗？是的很大！相当恐怖！兄弟！
-    # else:  # 否则就是三维的了
-    # input_image = np.reshape(input_image, [256, 256])  # 我感觉这一步可以删了
-    # tune_image = np.expand_dims(input_image, -1).repeat(shape[2], axis=-1)  # .astype('uint8')
-    #
-    # tune_image_f32 = tune_image.astype(np.float32)
-    # tune_image_f32_4dim = tune_image_f32[np.newaxis, :, :, :]
-
-    # tune_us_4dim = np.ones_like(tune_image_f32_4dim)
-    # tune_us_f32_4dim = tune_us_4dim.astype(np.float32)
-    # tune_image_f32_4dim = np.concatenate((tune_image_f32_4dim, tune_us_f32_4dim), axis=0)
-    # cfg = OrderedDict()
-    # cfg = {
-    #     'Session': {
-    #         'ID': 'absorrand',
-    #         'Photons': photons   # 1e8  # 真的需要这么多吗？我怎么感觉刚开始训练epoch用1e6也都差不多？还省时间
-    #     },
-    #     'Forward': {
-    #         'T0': 0,
-    #         'T1': 5e-09,
-    #         'Dt': 5e-09
-    #     },
-    #     'Domain': {
-    #         'MediaFormat': 'byte',
-    #         'LengthUnit': 0.1,
-    #
-    #         'Media': [{"mua": 0,
-    #                    "mus": 0,
-    #                    "g": 1,
-    #                    "n": 1}
-    #                   ],
-    #
-    #         'Dim': shape,  # 这得改啊!不然mc2出问题
-    #         'OriginType': 1
-    #     },
-    #     'Optode': {
-    #         'Source': {},  # 光源后面根据情况来
-    #         'Detector': []
-    #     },
-    #     'Shapes': tune_image  # 藏得真深啊!
-    # }
-    #
-    # for i in range(1, 101):  # 调整编号
-    #     if i == 1:
-    #         cfg_domain_media = {"mua": 0.0, "mus": 0, "g": 1, "n": 1}  # what a delightful bug !
-    #     else:
-    #         cfg_domain_media = {"mua": i / 1000, "mus": 10, "g": 0.9, "n": 1.37}
-    #     cfg["Domain"]["Media"].append(cfg_domain_media)
-
-    # if shape[0] == 1:  # 算了算了,最后改完再统一调
-    #     z, x, y = shape[0], shape[1],shape[2]  # z=1
-    #     source_list = [{"Type": "slit", "Pos": [0, 0, 0], "Dir": [0, 1, 0], "Param1": [0, 0, y, 0],
-    #                     "Param2": [0, 0, 0, 0]},
-    #                    {"Type": "slit", "Pos": [0, 0, y], "Dir": [0, 0, -1], "Param1": [0, x, 0, 0],
-    #                     "Param2": [0, 0, 0, 0]},
-    #                    {"Type": "slit", "Pos": [0, x, y], "Dir": [0, -1, 0], "Param1": [0, 0, -y, 0],
-    #                     "Param2": [0, 0, 0, 0]},
-    #                    {"Type": "slit", "Pos": [0, 0, 0], "Dir": [0, 0, 1], "Param1": [0, x, 0, 0],
-    #                     "Param2": [0, 0, 0, 0]}]
-    #
-    # else:
     x, y, z = shape[0], shape[1], shape[2]
     source_list = [{"Type": "slit", "Pos": [0, 0, math.ceil(z / 2)], "Dir": [1, 0, 0, 0], "Param1": [0, y, 0, 0],
                     "Param2": [0, 0, 0, 0]},
@@ -254,24 +189,18 @@ def mcxtry(input_image, shape, photons):
                    {"Type": "slit", "Pos": [0, 0, math.ceil(z / 2)], "Dir": [0, 1, 0, 0], "Param1": [x, 0, 0, 0],
                     "Param2": [0, 0, 0, 0]}]
     del x, y, z
-
-    # 准备完cfg，开始调用mcx
-    # mcxbin = 'mcx'  # 之前的判断应该用不到？mcxlab还能在非win上跑?可能学长得换一下路径
-    # mcxbin = "D:\\Alu_proj\\mcx_space\\mcx2023\\bin\\mcx.exe"
-    # mcxbin = "D:\\Alu_proj\\mcx_space\\mcx2020\\bin\\mcx.exe"
-    # SID = cfg["Session"]["ID"]
     result_list = []
     with suppress_stdout_stderr():
         for source_info in source_list:  # 嗯,先这样
             res = pmcx.run(
-                nphoton=10000000,  # photons,
+                nphoton=1000000,  # photons,
                 vol=input_image,
                 tstart=0,
                 tend=5e-9,
                 tstep=5e-9,
                 gpuid='1',
-                autopilot=1,
-                isreflect=1,
+                autopilot=1,  # 自适应 线程/块配置
+                isreflect=1,  # 边界反射
                 unitinmm=0.1,
                 srctype=source_info["Type"],
                 srcpos=source_info["Pos"],
@@ -282,67 +211,49 @@ def mcxtry(input_image, shape, photons):
             )
             result_list.append(res['flux'])
 
-            # cfg["Optode"]["Source"] = source_info
-            # newdata = cfg.copy()
-            # cfg_encoder = jd.encode(newdata, {'compression': 'zlib', 'base64': True})
-            # jd.save(cfg_encoder, SID + '.json', indent=4)  # 同名目录下产生 absorrand.json
-            #
-            # console_content = mcxbin + ' -f ' + SID + '.json' + ' -F mc2 0'
-            # # os.system(console_content)  # 同名目录下产生 absorrand.mc2
-            # subprocess.check_output(console_content, shell=True)  # 是啊，为什么要用os调用呢
-            #
-            # if os.path.isfile(SID + '.mch'): mch = loadmch(SID + '.mch', datadict=datadict)
-            # if os.path.isfile(SID + '.mc2'):
-            #     nbstep = round((cfg["Forward"]["T1"] - cfg["Forward"]["T0"]) / cfg["Forward"]["Dt"])
-            #     if "Dim" in cfg["Domain"] and cfg["Domain"]["Dim"] != []:
-            #         dt = cfg["Domain"]["Dim"] + [nbstep]
-            #     elif "Shapes" in cfg:
-            #         for find in cfg["Shapes"]:
-            #             if "Grid" in find:
-            #                 dt = find["Grid"]["Size"] + [nbstep]
-            #
-            #     result_list.append(loadmc2(SID + '.mc2', dt))
-
     results = result_list[0] + result_list[1] + result_list[2] + result_list[3]
     if shape[0] == 1:
         results = np.squeeze(results)  # 二维应该是直接降维吧,中间没调试,我也不知道出来的是256,256还是1,256,256
-        # print('\t\tMcx_try_func: P0 output without cut size{} '.format(results.shape))
     else:
-        # print('\t\tMcx_try_func: P0 output shape {} cut from half {}'.format(results.shape, int(shape[2] / 2)))
-        results = results[:, :, int(shape[2]/ 2)]  # 如果是三维就取其中中间的那一片
+        results = results[:, :, int(shape[2]/2-1)]  # 如果是三维就取其中中间的那一片
         results = np.squeeze(results)
-        # print('\t\tMcx_try_func: P0 output cut to {} '.format(results.shape))
     return results
 
 
 
-def using_mcx(opt, ua, us , mcx_info, fai_tune_cache):
+def using_mcx(opt, ua, us ,margin, mcx_info, fai_tune_cache):
     """
     :param opt: 字面意思
-    :param out: 生成器的输出内容
+    :param ua: matrix(1,1,256,256) 吸收系数矩阵`
+    :param us: matrix(1,1,256,256) 散射系数矩阵
     :param mcxinfo: 暂定为一个字典，包含 epoch、mcx_shape、mcx_photons
-    mcx_shape
-    蒙特卡洛模拟空间,如果第一维数据为1,则视为2维数据,  !似乎x,y需要和 out的长宽耦合,之后再说
-    举例: [1,256,256]为创建2维平面,对应[占位],x,y
-          [3,256,256] 为创建3维空间,对应 x,y,z  # 其中x不能是 1
-    mcx_photons
-    光子包数量
+    mcx_photons 光子包数量
     :return:
+    :fai_tune: matrix(1,1,256,256) 光通量图像
+    :p0_tune:  matrix(1,1,256,256) 初始声压图像
     """
     epoch = mcx_info['epoch']
     mcx_shape = mcx_info['mcx_shape']
     mcx_photons = mcx_info['mcx_photons']
-
-    # amend_list = [out[0, 0, 76, 181],out[0, 0, 127, 127],out[0, 0, 184, 87],out[0, 0, 93, 73],out[0, 0, 146, 194]]
+    # amend_list = [ua[0, 0, 76, 181],ua[0, 0, 127, 127],ua[0, 0, 184, 87],ua[0, 0, 93, 73],ua[0, 0, 146, 194]]
     # amend_list = [i.data.cpu().tolist() for i in amend_list]  # 担心一会tensor和数组一起操作出问题
     # amend_list = [0.01 if i < 0.01 else i for i in amend_list]  # 嗯
     # amend = sum(amend_list)/len(amend_list)
     # amend = amend / 0.01  # 这里选出来的像素值对应的ua真值是0.01
-    # ua_with_gard = out / amend  # 此处out存在梯度值
+    # ua_with_gard = ua / amend  # 此处out存在梯度值
+    # opt.ua_min = 0
+    # opt.ua_max = 0.1
 
+    # ua = ua * (opt.ua_max - opt.ua_min) + opt.ua_min
+    # ua[margin] = 0
     ua_true = ua.data.cpu().detach()
     ua_true = ua_true.numpy()      # 将ua_true与out分离，使得ua_true不带梯度值方便后续MC运行
+    # ua_true[ua_true < opt.margin_flag] = 0
+    # ua_true[ua_true >= opt.margin_flag] = opt.ua_min + (opt.ua_max - opt.ua_min) * ( (ua_true[ua_true >= opt.margin_flag] - opt.margin_flag) / (1 - opt.margin_flag) )
+    ua_true = ua_true * (opt.ua_max - opt.ua_min) + opt.ua_min
+
     ua_true = np.reshape(ua_true, [256, 256])
+
 
     us_true = us.data.cpu().detach()
     us_true = us_true.numpy()      # 将ua_true与out分离，使得ua_true不带梯度值方便后续MC运行
@@ -382,17 +293,18 @@ def using_mcx(opt, ua, us , mcx_info, fai_tune_cache):
     else:
         fai_tune = fai_tune_cache
 
-    ua_true = ua_true + 1e-8
+    fai_tune = fai_tune + 1e-12
     fai_tune = fai_tune.type(opt.dtype)
 
-    p0 = fai_tune * ua               # 相乘得到p0,并算是接上了梯度
+    p0 = fai_tune * ua              # 相乘得到p0,并算是接上了梯度
 
     p0_tune = torch.log(p0)
 
     p0_mask = torch.zeros_like(p0_tune)  # 换了换了，能少些循环就少写循环
-    p0_tune = torch.where(p0_tune>0.0001,p0_tune,p0_mask)
 
     p0_tune = p0_tune / torch.max(p0_tune)  # 取log然后归一化与输入的归一化P0相对应
+
+    p0_tune = torch.where(p0_tune>0.0001,p0_tune,p0_mask)
 
     p0_tune = p0_tune.type(opt.dtype)  # 其实我感觉这句没用
     if mcx_info['epoch'] % opt.print_step == 0:
