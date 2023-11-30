@@ -17,3 +17,4 @@ if __name__ == '__main__':
     # p0
     loss_p0_list, out_img_p0, model = evaluate_info(opt, model, p0_img_var)  # 代替 fit
     save_mat_info(opt,out_img_p0,loss_p0_list["total"],"p0", True)
+

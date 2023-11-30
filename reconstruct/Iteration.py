@@ -103,7 +103,7 @@ def nowtime_mcxshape(epoch, total_epoch,x_shape,y_shape):
 
 def nowtime_photons(epoch, total_epoch):
     begin_photon = 1e5
-    end_photon = 5e7
+    end_photon = 1e8
     rate = 0.8
     now_rate = epoch/total_epoch
     if epoch/total_epoch <= rate:
@@ -129,8 +129,6 @@ def evaluate_info(opt, model, label_img):
     # opt.margin_flag = 0.1  # model的输出∈[0,1] 在该值上的全进行计算，该值以下全部置0  # 注意:该值与label边界判定的阈值并不是一个意思
     opt.ua_min = 0.0      # 预先设定,组织体吸收系数最小值
     opt.ua_max = 0.1       # 预先设定,组织体吸收系数最大值
-    iter = opt.num_iter_p0
-    quantity = 'p0'
 
     net_input_const = load_net_input(opt, label_img)
     optimizer = load_optimizer(opt, model, net_input_const)
@@ -144,11 +142,11 @@ def evaluate_info(opt, model, label_img):
     matrix_us = torch.full_like(label_img, 1)
     matrix_us[margin_idx] = 0
 
-    writer = SummaryWriter(os.path.join(opt.save_path,quantity))
-    writer.add_image('org_input', label_img[0].cpu().detach().numpy(), 1)
+    writer = SummaryWriter(os.path.join(opt.save_path,'p0'))
+    # writer.add_image('org_input', label_img[0].cpu().detach().numpy(), 1)
 
     mc_out = False
-    for i in range(iter):  # --------------------------------------------------------------------------------
+    for i in range(opt.num_iter_p0):  # --------------------------------------------------------------------------------
         # 学习率衰减
         if opt.lr_decay_epoch != 0 and i%opt.lr_decay_epoch==0:
             optimizer,opt = exp_lr_scheduler(optimizer, opt)
@@ -163,11 +161,11 @@ def evaluate_info(opt, model, label_img):
         margin_label = net_output.clone()
         margin_label[margin_idx] = 0
         mse_loss_margin = mse(net_output, margin_label)
-        mse_loss_margin.backward()
-        optimizer.step()
-
-        optimizer.zero_grad()
-        net_output = model(net_input.type(opt.dtype))
+        # mse_loss_margin.backward()
+        # optimizer.step()
+        #
+        # optimizer.zero_grad()
+        # net_output = model(net_input.type(opt.dtype))
 
         """
         net_output作为一个1,1,256,256输入 (ua、us) [0,1]
@@ -177,7 +175,7 @@ def evaluate_info(opt, model, label_img):
         """
         mcxinfo = nowtime_mcxinfo(i, opt.num_iter_p0, x_shape=net_output.shape[2], y_shape=net_output.shape[3])
 
-        mc_out, mc_mix = using_mcx(opt, net_output, matrix_us,margin_idx, mcxinfo,mc_out)  # 输出的分别是 fai 和 p0
+        mc_out, mc_mix = using_mcx(opt, net_output, matrix_us, margin_idx, mcxinfo,mc_out)  # 输出的分别是 fai 和 p0
         """ 调整后
         :param net_output: 网络输出 光子吸收系数分布 ua
         :param mc_out: 蒙卡输出 光通量分布 fai
@@ -186,15 +184,15 @@ def evaluate_info(opt, model, label_img):
         # Huber_loss = nn.SmoothL1Loss(beta=1)
         mse_loss = mse(mc_mix, label_img)
         tv_loss = tv(mc_mix)
-        total_loss = mse_loss
-        # total_loss = mse_loss +  mse_loss_margin
+        # total_loss = mse_loss
+        total_loss = mse_loss +  0.1 * mse_loss_margin
         # --------------------------------------------------------------------------------------------------------------
 
         total_loss.backward()
         optimizer.step()
 
         if i % opt.print_step == 0:
-            print('\nEvaluate_info: {} epoch {}'.format(quantity, i))
+            print('\nEvaluate_info: {} epoch {}'.format('p0', i))
             print('Evaluate_info: with mcx info {}'.format(mcxinfo))
             print('Evaluate_info: calcuate mse loss {} with {}'.format(net_output.shape, label_img.shape))
             print('Iteration %05d Total loss %f Mse loss %f TV loss %f ' % (
@@ -206,7 +204,7 @@ def evaluate_info(opt, model, label_img):
 
             if i % opt.draw_step == 0 or i <= opt.draw_step:  # 高频读写文件实在是太影响效率了
                 out_draw = net_output.clone()
-                out_draw[margin_idx] = 0
+                # out_draw[margin_idx] = 0  # 强制掐边
                 draw_img_p0(opt, label_img, net_input, mc_out ,mc_mix, out_draw, i)
 
             writer.add_image('output', net_output[0].cpu().detach().numpy(), i)
@@ -233,13 +231,7 @@ def evaluate_info(opt, model, label_img):
 
 
 # 当作ua的,以后再改
-def pre_evaluate_info(opt, model, label_img, use_mcx=False):
-    if use_mcx:
-        iter = opt.num_iter_p0
-        quantity = 'p0'
-    else:
-        iter = opt.num_iter_ua
-        quantity = 'ua'
+def pre_evaluate_info(opt, model, label_img):
 
     net_input_const = load_net_input(opt, label_img)
     optimizer = load_optimizer(opt, model, net_input_const)
@@ -249,16 +241,14 @@ def pre_evaluate_info(opt, model, label_img, use_mcx=False):
         best_net = copy.deepcopy(model)
         best_mse = 1000000
 
-    writer = SummaryWriter(os.path.join(opt.save_path,quantity))
+    writer = SummaryWriter(os.path.join(opt.save_path,'ua'))
     writer.add_image('org_input', label_img[0].cpu().detach().numpy(), 1)
 
     mc_out = False
-    for i in range(iter):  # --------------------------------------------------------------------------------
-        if i % opt.print_step == 0:
-            print('\nEvaluate_info: {} epoch {}'.format(quantity, i))
+    for i in range(opt.num_iter_ua):  # --------------------------------------------------------------------------------
         # 学习率衰减
-        if opt.lr_decay_epoch != 0:
-            optimizer = exp_lr_scheduler(optimizer, i, init_lr=opt.LR, lr_decay_epoch=opt.lr_decay_epoch)
+        if opt.lr_decay_epoch != 0 and i % opt.lr_decay_epoch == 0:
+            optimizer,opt = exp_lr_scheduler(optimizer, opt)
         # 原图添加随即抖动
         if opt.reg_noise_std > 0:
             if i % opt.reg_noise_decay == 0:
@@ -268,30 +258,9 @@ def pre_evaluate_info(opt, model, label_img, use_mcx=False):
         optimizer.zero_grad()
         net_output = model(net_input.type(opt.dtype))
 
-        if use_mcx:
-            """
-            out作为一个1,1,256,256输入不变，mcx_shape根据p0的迭代方法从2维到3维
-            使用nowtime_mcxshape()根据当前迭代次数转换mcx的空间
-            加判断顺带着变量互换，似乎如果是求p0，后面生成的ua也没有使用的联系？
-            """
-            mcxinfo = nowtime_mcxinfo(i, opt.num_iter_p0, x_shape=net_output.shape[2], y_shape=net_output.shape[3])
-            if i % opt.print_step == 0:
-                print('Evaluate_info: with mcx info {}'.format(mcxinfo))
-
-            mc_out, mc_mix = using_mcx(opt, net_output, label_img, mcx_info=mcxinfo,fai_tune_cache=mc_out)  # 输出的分别是 fai 和 p0
-            """ 调整后
-            :param net_output: 网络输出 光子吸收系数分布 ua
-            :param mc_out: 蒙卡输出 光通量分布 fai
-            :param mc_mix: 蒙卡+网络计算得到的 初始声压图像 p0
-            """
-            # Huber_loss = nn.SmoothL1Loss(beta=1)
-            mse_loss = mse(mc_mix, label_img)
-            tv_loss = tv(mc_mix)
-            total_loss = mse_loss + 0 * tv_loss  # --------------------
-        else:
-            mse_loss = mse(net_output, label_img)
-            tv_loss = tv(net_output)
-            total_loss = mse_loss + 0 * tv_loss  # --------------------
+        mse_loss = mse(net_output, label_img)
+        tv_loss = tv(net_output)
+        total_loss = mse_loss + 0 * tv_loss  # --------------------
 
         total_loss.backward()
         optimizer.step()
@@ -306,12 +275,7 @@ def pre_evaluate_info(opt, model, label_img, use_mcx=False):
             save_loss_list["total"].append(total_loss.data.cpu().numpy())
 
             if i % opt.draw_step == 0 or i <= opt.draw_step:  # 高频读写文件实在是太影响效率了
-                if use_mcx:
-                    draw_img_p0(opt, label_img, net_input, mc_out ,mc_mix, net_output, i)
-                else:
-                    draw_img(opt, label_img, net_input, net_output, i)
-                # label_and_output_image = np.array(Image.open('latest_img.png'))[:, :, 0:3]
-                # writer.add_image('label_and_output', label_and_output_image,i, dataformats='HWC')
+                draw_img(opt, label_img, net_input, net_output, i)
 
             writer.add_image('output', net_output[0].cpu().detach().numpy(), i)
             writer.add_scalars('loss',{'Total loss': total_loss.data,

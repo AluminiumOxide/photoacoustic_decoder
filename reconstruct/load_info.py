@@ -22,14 +22,14 @@ def load_arguments():
     # parser.add_argument('--p0_path', default='./test_data/proto_ua_agar/p0/p0_p.mat')  # p0_final
     parser.add_argument('--ua_path', default='./test_data/proto_ua_liver/ua/ua.mat')
     parser.add_argument('--p0_path', default='./test_data/proto_ua_liver/p0/p0.mat')  # p0_final
-    parser.add_argument('--save_path', default='./save/lyp11_16/')
+    parser.add_argument('--save_path', default='./save/lyp11_21_p0_mix/')
     # model
     parser.add_argument('--input_channel', type=int, default=64)
     parser.add_argument('--num_channels', type=list, default=[64, 64, 64, 64])
     parser.add_argument('--output_depth', type=int, default=1)  # img_np.shape[0] 如果是彩色图则为3，灰度图则为1
     parser.add_argument('--reg_noise_std', type=float, default=0.001, help='')
     parser.add_argument('--reg_noise_decay', type=int, default=500, help='')
-    parser.add_argument('--num_iter_ua', type=int, default=101, help='')  # 相当于预训练
+    parser.add_argument('--num_iter_ua', type=int, default=5001, help='')  # 相当于预训练
     parser.add_argument('--num_iter_p0', type=int, default=int(10000+1), help='')  # 调用mcx
     parser.add_argument('--LR', type=float, default=0.025, help='')
     parser.add_argument('--find_best', type=bool, default=True, help='')
@@ -57,7 +57,7 @@ def load_arguments():
     return args
 
 
-def np_to_var(img_np, dtype = torch.cuda.FloatTensor):
+def np_to_var(img_np):
     '''Converts image in numpy.array to torch.Variable.
     From C x W x H [0..1] to  1 x C x W x H [0..1]
     '''

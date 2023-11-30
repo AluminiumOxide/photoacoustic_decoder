@@ -11,148 +11,6 @@ import subprocess
 import pmcx
 import torch
 
-# def loadmc2(path, dimension):
-#     f = open(path, 'rb')
-#     data = f.read()
-#     data = unpack('%df' % (len(data) / 4), data)
-#     data = np.asarray(data).reshape(dimension, order='F')
-#     return data
-#
-#
-# def loadmch(fname, format='f', endian='ieee-le', datadict=False):
-#     def fread(fileid, N, Type):
-#         if Type == 'c' or Type == 'b' or Type == 'B' or Type == '?':
-#             Nb = 1
-#         elif Type == 'h' or Type == 'H':
-#             Nb = 2
-#         elif Type == 'i' or Type == 'I' or Type == 'l' or Type == 'L' or Type == 'f':
-#             Nb = 4
-#         elif Type == 'q' or Type == 'Q' or Type == 'd':
-#             Nb = 8
-#         else:
-#             raise Exception("Type unknow")
-#
-#         if N == 1:
-#             return unpack(Type, fileid.read(Nb))[0]
-#         else:
-#             return unpack(str(N) + Type, fileid.read(N * Nb))
-#
-#     try:
-#         fid = open(fname, 'rb')
-#     except:
-#         raise Exception("Could no open the given file name " + fname)
-#
-#     data = []
-#     header = []
-#     photon_seed = []
-#
-#     while True:
-#
-#         magicheader = fid.read(4)  # a char is 1 Bytes
-#
-#         if not magicheader:
-#             break
-#         elif magicheader != b'MCXH':
-#             fid.close()
-#             raise Exception("It might not be a mch file!")
-#
-#         version = fread(fid, 1, 'I')
-#
-#         assert version == 1, "version higher than 1 is not supported"
-#
-#         maxmedia = fread(fid, 1, 'I')
-#         detnum = fread(fid, 1, 'I')
-#         colcount = fread(fid, 1, 'I')
-#         totalphoton = fread(fid, 1, 'I')
-#         detected = fread(fid, 1, 'I')
-#         savedphoton = fread(fid, 1, 'I')
-#         unitmm = fread(fid, 1, 'f')
-#         seedbyte = fread(fid, 1, 'I')
-#         normalizer = fread(fid, 1, 'f')
-#         respin = fread(fid, 1, 'i')
-#         srcnum = fread(fid, 1, 'I')
-#         savedetflag = fread(fid, 1, 'I')
-#         junk = fread(fid, 2, 'i')
-#
-#         detflag = np.asarray(list(bin(savedetflag & (2 ** 8 - 1))[2:]), 'int')
-#         if endian == 'ieee-le': detflag = detflag[::-1]  # flip detflag left to right
-#         datalen = np.asarray([1, maxmedia, maxmedia, maxmedia, 3, 3, 1])
-#         datlen = detflag * datalen[0:len(detflag)]
-#
-#         dat = fread(fid, (colcount * savedphoton), format)
-#         dat = np.asarray(dat).reshape(savedphoton, colcount)
-#
-#         if savedetflag and len(detflag) > 2 and detflag[2] > 0:
-#             dat[:, sum(datlen[0:2]):sum(datlen[0:3])] = dat[:, sum(datlen[0:2]):sum(datlen[0:3])] * unitmm
-#         elif savedetflag == 0:
-#             dat[:, 1 + maxmedia:(2 * maxmedia)] = dat[:, 1 + maxmedia:(2 * maxmedia)] * unitmm
-#
-#         # make the data as a dictionary
-#         if datadict:
-#             if savedetflag:
-#                 data_dic = [{} for x in range(savedphoton)]
-#                 for photonid in range(savedphoton):
-#                     if len(detflag) > 0 and detflag[0] != 0: data_dic[photonid]["detid"] = dat[photonid][0]
-#                     if len(detflag) > 1 and detflag[1] != 0: data_dic[photonid]["nscat"] = dat[photonid][
-#                                                                                            datlen[0]:1 + datlen[1]]
-#                     if len(detflag) > 2 and detflag[2] != 0: data_dic[photonid]["ppath"] = dat[photonid][
-#                                                                                            sum(datlen[0:2]):sum(
-#                                                                                                datlen[0:3])]
-#                     if len(detflag) > 3 and detflag[3] != 0: data_dic[photonid]["mom"] = dat[photonid][
-#                                                                                          sum(datlen[0:3]):sum(
-#                                                                                              datlen[0:4])]
-#                     if len(detflag) > 4 and detflag[4] != 0: data_dic[photonid]["p"] = dat[photonid][
-#                                                                                        sum(datlen[0:4]):sum(
-#                                                                                            datlen[0:5])]
-#                     if len(detflag) > 5 and detflag[5] != 0: data_dic[photonid]["v"] = dat[photonid][
-#                                                                                        sum(datlen[0:5]):sum(
-#                                                                                            datlen[0:6])]
-#                     if len(detflag) > 6 and detflag[6] != 0: data_dic[photonid]["w0"] = dat[photonid][-1]
-#
-#             elif savedetflag == 0:
-#                 data_dic = [{"detid": photon[0],
-#                              "nscat": photon[1:1 + maxmedia],
-#                              "ppath": photon[1 + maxmedia:1 + 2 * maxmedia],
-#                              "mom": photon[1 + 2 * maxmedia:1 + 3 * maxmedia],
-#                              "p": photon[-7:-4:1], "v": photon[-4:-1:1],
-#                              "w0": photon[-1]} for photon in dat]
-#
-#             del dat
-#             dat = np.asarray(data_dic)
-#
-#         data.append(dat)
-#
-#         # if "save photon seed" is True
-#         if seedbyte > 0:
-#             # seeds = unpack('%dB' % (savedphoton*seedbyte), fid.read(savedphoton*seedbyte))
-#             seeds = fread(fid, (savedphoton * seedbyte), 'B')
-#             photon_seed.append(np.asarray(seeds).reshape((seedbyte, savedphoton), order='F'))
-#
-#         if respin > 1: totalphoton *= respin
-#
-#         header = {'version': version,
-#                   'medianum': maxmedia,
-#                   'detnum': detnum,
-#                   'recordnum': colcount,
-#                   'totalphoton': totalphoton,
-#                   'detectedphoton': detected,
-#                   'savedphoton': savedphoton,
-#                   'lengthunit': unitmm,
-#                   'seedbyte': seedbyte,
-#                   'normalizer': normalizer,
-#                   'respin': respin,
-#                   'srcnum': srcnum,
-#                   'savedetflag': savedetflag}
-#
-#     fid.close()
-#
-#     data = np.asarray(data).squeeze()
-#
-#     if seedbyte > 0:
-#         photon_seed = np.asarray(photon_seed).transpose((0, 2, 1)).squeeze()
-#
-#     return data, header, photon_seed
-
 
 class suppress_stdout_stderr(object):
     '''禁用标准输出和标准错误输入，也就是屏蔽第三方库调用的各种命令行指令 '''
@@ -177,7 +35,7 @@ def mcxtry(input_image, shape, photons):
     :param input_image: npdarray(2,256,256,z) 对应(ua,x,y,z)和(us,x,y,z)
     :param shape: 蒙特卡洛模拟的空间设置
     :param Photons: 光子包数量
-    :return:
+    :return: fai ndarray(256,256)
     """
     x, y, z = shape[0], shape[1], shape[2]
     source_list = [{"Type": "slit", "Pos": [0, 0, math.ceil(z / 2)], "Dir": [1, 0, 0, 0], "Param1": [0, y, 0, 0],
@@ -193,7 +51,7 @@ def mcxtry(input_image, shape, photons):
     with suppress_stdout_stderr():
         for source_info in source_list:  # 嗯,先这样
             res = pmcx.run(
-                nphoton=1000000,  # photons,
+                nphoton=photons,  # photons,
                 vol=input_image,
                 tstart=0,
                 tend=5e-9,
@@ -207,7 +65,7 @@ def mcxtry(input_image, shape, photons):
                 srcdir=source_info["Dir"],
                 srcparam1=source_info["Param1"],
                 srcparam2=source_info["Param2"],
-                prop=np.array([[0, 0, 1, 1], [0.01, 1, 0.9, 1.37]]),
+                prop=np.array([[0, 0, 1, 1], [0, 1, 0.9, 1.37]]),
             )
             result_list.append(res['flux'])
 
@@ -215,7 +73,7 @@ def mcxtry(input_image, shape, photons):
     if shape[0] == 1:
         results = np.squeeze(results)  # 二维应该是直接降维吧,中间没调试,我也不知道出来的是256,256还是1,256,256
     else:
-        results = results[:, :, int(shape[2]/2-1)]  # 如果是三维就取其中中间的那一片
+        results = results[:, :, math.ceil(shape[2] / 2)-1]  # 如果是三维就取其中中间的那一片
         results = np.squeeze(results)
     return results
 
@@ -235,17 +93,7 @@ def using_mcx(opt, ua, us ,margin, mcx_info, fai_tune_cache):
     epoch = mcx_info['epoch']
     mcx_shape = mcx_info['mcx_shape']
     mcx_photons = mcx_info['mcx_photons']
-    # amend_list = [ua[0, 0, 76, 181],ua[0, 0, 127, 127],ua[0, 0, 184, 87],ua[0, 0, 93, 73],ua[0, 0, 146, 194]]
-    # amend_list = [i.data.cpu().tolist() for i in amend_list]  # 担心一会tensor和数组一起操作出问题
-    # amend_list = [0.01 if i < 0.01 else i for i in amend_list]  # 嗯
-    # amend = sum(amend_list)/len(amend_list)
-    # amend = amend / 0.01  # 这里选出来的像素值对应的ua真值是0.01
-    # ua_with_gard = ua / amend  # 此处out存在梯度值
-    # opt.ua_min = 0
-    # opt.ua_max = 0.1
 
-    # ua = ua * (opt.ua_max - opt.ua_min) + opt.ua_min
-    # ua[margin] = 0
     ua_true = ua.data.cpu().detach()
     ua_true = ua_true.numpy()      # 将ua_true与out分离，使得ua_true不带梯度值方便后续MC运行
     # ua_true[ua_true < opt.margin_flag] = 0
@@ -280,39 +128,30 @@ def using_mcx(opt, ua, us ,margin, mcx_info, fai_tune_cache):
     # matrix_103 = matrix_103.astype(np.uint8)
 
     if epoch % opt.mcx_step == 0:
-        fai = mcxtry(input_image=matrix_100,shape=mcx_shape,photons=mcx_photons)  # 开始炼丹,并得到光通量 -----------------
-        # sum_1 = fai.sum()
-        fai = np.where(us_true == 0, 0, fai)
-        # sum_2 = fai.sum()
-        # fai = fai * sum_2 / sum_1
-        fai_tune = fai + 1e-8  # 给光通量加一个极小值防止取log时出错
-        fai_tune = torch.from_numpy(fai_tune)  # 准备将fai转为tensor数据
+        fai = mcxtry(input_image=matrix_100,shape=mcx_shape,photons=mcx_photons)  # 开始炼丹,并得到光通量 (256,256)的ndarray -----------------
+        fai = np.where(us_true == 0, 0, fai) # 切割边界
+        fai = fai/fai.max()  # 直接将剩余的数值归1,
+        fai_tune = torch.from_numpy(fai)  # 准备将fai转为tensor数据
         fai_tune = torch.unsqueeze(fai_tune, 0)
         fai_tune = torch.unsqueeze(fai_tune, 0)  # 将fai格式转为1*1*256*256,与网络输出out相对应
         fai_tune = fai_tune.float()              # 将fai数据类型转为float，与网络输出out想对应
     else:
         fai_tune = fai_tune_cache
 
-    fai_tune = fai_tune + 1e-12
     fai_tune = fai_tune.type(opt.dtype)
 
-    p0 = fai_tune * ua              # 相乘得到p0,并算是接上了梯度
+    p0 = fai_tune * ua                # 相乘得到p0,并算是接上了梯度
+    p0_log = torch.log(p0+1e-12)
+    p0_log_p = p0_log - p0_log.min()  # 但是这个玩意全是负的 给它拉到正值
+    p0_log_1 = p0_log_p / torch.max(p0_log_p)  # 取log然后归一化与输入的归一化P0相对应
 
-    p0_tune = torch.log(p0)
+    p0_mask = torch.zeros_like(p0_log_1)  # 换了换了，能少些循环就少写循环
+    p0_tune = torch.where(p0_log_1>0.0001,p0_log_1,p0_mask)
 
-    p0_mask = torch.zeros_like(p0_tune)  # 换了换了，能少些循环就少写循环
-
-    p0_tune = p0_tune / torch.max(p0_tune)  # 取log然后归一化与输入的归一化P0相对应
-
-    p0_tune = torch.where(p0_tune>0.0001,p0_tune,p0_mask)
-
-    p0_tune = p0_tune.type(opt.dtype)  # 其实我感觉这句没用
     if mcx_info['epoch'] % opt.print_step == 0:
         print('\t\tMcx_try_func: P0 output with size{} '.format(fai_tune.shape))
         print("\tUsing_mcx: return P0 shape {}".format(p0_tune.shape))
     return fai_tune,p0_tune
-
-
 
 
 
