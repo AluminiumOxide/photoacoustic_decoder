@@ -156,16 +156,16 @@ def evaluate_info(opt, model, label_img):
                 opt.reg_noise_std *= 0.7
             net_input = net_input_const + torch.randn(net_input_const.shape) * opt.reg_noise_std
 
-        optimizer.zero_grad()
-        net_output = model(net_input.type(opt.dtype))
-        margin_label = net_output.clone()
-        margin_label[margin_idx] = 0
-        mse_loss_margin = mse(net_output, margin_label)
+        # optimizer.zero_grad()
+        # net_output = model(net_input.type(opt.dtype))
+        # margin_label = net_output.clone()
+        # margin_label[margin_idx] = 0
+        # mse_loss_margin = mse(net_output, margin_label)
         # mse_loss_margin.backward()
         # optimizer.step()
         #
-        # optimizer.zero_grad()
-        # net_output = model(net_input.type(opt.dtype))
+        optimizer.zero_grad()
+        net_output = model(net_input.type(opt.dtype))
 
         """
         net_output作为一个1,1,256,256输入 (ua、us) [0,1]
@@ -184,8 +184,8 @@ def evaluate_info(opt, model, label_img):
         # Huber_loss = nn.SmoothL1Loss(beta=1)
         mse_loss = mse(mc_mix, label_img)
         tv_loss = tv(mc_mix)
-        # total_loss = mse_loss
-        total_loss = mse_loss +  0.1 * mse_loss_margin
+        total_loss = mse_loss
+        # total_loss = mse_loss +  mse_loss_margin
         # --------------------------------------------------------------------------------------------------------------
 
         total_loss.backward()
